@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>브랜드관 패키지 관리 | 픽견적 판매자</title>
+  <link rel="shortcut icon" href="/favicon.ico?v=20260804-center" />
+  <meta name="theme-color" content="#0f7665" />
+  <script>
+    (() => {
+      const mobile = /Android|iPhone|iPad|iPod|Windows Phone|Mobile|SamsungBrowser|KAKAOTALK|NAVER/i.test(navigator.userAgent || "");
+      const touch = (navigator.maxTouchPoints || 0) > 0;
+      const compact = Math.min(window.innerWidth || screen.width || 0, screen.width || window.innerWidth || 0) <= 900;
+      if (mobile || (touch && compact)) document.documentElement.classList.add("is-mobile-device");
+    })();
+  </script>
+  <link rel="stylesheet" href="/styles.css?v=20260805-press5" />
+  <link rel="stylesheet" href="/brand/brand.css?v=20260807-brand-v1" />
+  <link rel="stylesheet" href="/brand/manage/manage.css?v=20260807-brand-v1" />
+  <script defer src="/brand/manage/manage.js?v=20260807-brand-v1"></script>
+</head>
+<body class="brand-manage-body">
+  <header class="topbar brand-hall-topbar">
+    <a class="brand brand-home-link" href="/" aria-label="픽견적 홈"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path class="logo-sheet" d="M12 7h12l7 7v19H12z"/><path class="logo-fold" d="M24 7v8h7"/><path class="logo-line" d="M17 18h9M17 23h7"/><path class="logo-check" d="M15.5 29.5l3.4 3.3 7.1-8"/></svg></span><span>픽견적</span></a>
+    <div class="brand-manage-header-title">브랜드관 판매자 관리</div>
+    <nav class="nav brand-hall-nav"><a href="/brand">브랜드관 보기</a><a href="/seller">판매자 페이지</a></nav>
+  </header>
+  <main class="brand-manage-main">
+    <section class="brand-manage-login" id="loginPanel">
+      <span class="brand-hall-kicker">SELLER ONLY</span>
+      <h1>브랜드관 패키지 관리</h1>
+      <p>승인된 픽견적 판매자 계정으로 로그인하면 지점 패키지와 상담 신청 고객을 관리할 수 있습니다.</p>
+      <form id="sellerAuthForm" class="brand-manage-auth-form">
+        <label>판매자 아이디<input type="text" name="sellerId" autocomplete="username" required /></label>
+        <label>비밀번호<input type="password" name="password" autocomplete="current-password" required /></label>
+        <button class="brand-primary-btn" type="submit">판매자 로그인</button>
+        <p class="brand-form-message" id="authMessage"></p>
+      </form>
+    </section>
+
+    <section class="brand-manage-workspace" id="workspace" hidden>
+      <div class="brand-manage-heading">
+        <div><span class="brand-hall-kicker">MY BRAND HALL</span><h1 id="sellerHeading">내 지점 브랜드관</h1><p id="sellerMeta"></p></div>
+        <div class="brand-manage-heading-actions"><a href="/brand" target="_blank" rel="noopener">브랜드관 미리보기</a><button type="button" id="logoutBtn">로그아웃</button></div>
+      </div>
+      <div class="brand-manage-tabs" role="tablist">
+        <button class="is-active" type="button" data-manage-tab="packages">패키지 관리</button>
+        <button type="button" data-manage-tab="leads">상담 신청 고객 <span id="leadCountBadge">0</span></button>
+      </div>
+
+      <div id="packagesPanel" class="brand-manage-panel">
+        <div class="brand-manage-layout">
+          <form id="packageForm" class="brand-package-form">
+            <div class="brand-manage-form-head"><div><span class="brand-hall-kicker">PACKAGE EDITOR</span><h2 id="packageFormTitle">새 패키지 등록</h2></div><button class="brand-text-btn" type="button" id="resetPackageBtn">새로 작성</button></div>
+            <input type="hidden" name="packageId" />
+            <label>대표 이미지<input type="file" name="coverImage" accept="image/jpeg,image/png,image/webp,image/*" /><small>제품들이 함께 보이는 이미지를 권장합니다. JPG·PNG·WebP</small></label>
+            <div class="brand-cover-preview" id="coverPreview"><span>대표 이미지 미리보기</span></div>
+            <div class="brand-form-row">
+              <label>브랜드<select name="brand" required><option value="">선택</option><option>LG전자</option><option>삼성전자</option><option>기타</option></select></label>
+              <label>노출 상태<select name="status"><option value="active">공개</option><option value="hidden">숨김</option></select></label>
+            </div>
+            <label>패키지 제목<input type="text" name="title" maxlength="80" placeholder="예: 신혼 필수 가전 5종 패키지" required /></label>
+            <label>제품 구성<textarea name="items" rows="6" maxlength="1200" placeholder="제품을 한 줄에 하나씩 입력하세요.\n예) 냉장고 M875...\n워시타워 WL...\nOLED TV OLED..." required></textarea><small>최대 12개 제품까지 표시합니다.</small></label>
+            <div class="brand-form-row">
+              <label>정상가(원)<input type="text" name="originalPrice" inputmode="numeric" placeholder="13200000" /></label>
+              <label>패키지 금액(원)<input type="text" name="salePrice" inputmode="numeric" placeholder="10890000" required /></label>
+            </div>
+            <label>혜택·조건<textarea name="benefits" rows="4" maxlength="600" placeholder="예: 카드 혜택 별도 / 설치 일정 협의 / 사은품 상담"></textarea></label>
+            <button class="brand-primary-btn" id="savePackageBtn" type="submit">패키지 저장</button>
+            <p class="brand-form-message" id="packageMessage"></p>
+          </form>
+          <section class="brand-my-packages"><div class="brand-manage-section-title"><div><span class="brand-hall-kicker">MY PACKAGE</span><h2>등록 패키지</h2></div><span id="myPackageCount">0개</span></div><div id="myPackageList" class="brand-my-package-list"></div></section>
+        </div>
+      </div>
+
+      <div id="leadsPanel" class="brand-manage-panel" hidden>
+        <div class="brand-manage-section-title"><div><span class="brand-hall-kicker">CONSULT REQUEST</span><h2>상담 신청 고객</h2></div><button class="brand-text-btn" type="button" id="refreshLeadsBtn">새로고침</button></div>
+        <div id="leadList" class="brand-lead-list"></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

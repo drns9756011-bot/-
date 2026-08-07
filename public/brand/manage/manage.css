@@ -1,0 +1,68 @@
+.brand-manage-body { background: #f4f8f6; color: #14212b; }
+.brand-manage-header-title { font-weight: 900; color: #52605d; margin-left: auto; margin-right: 20px; }
+.brand-manage-main { width: min(1180px, calc(100% - 36px)); margin: 38px auto 80px; }
+.brand-manage-login { width: min(520px, 100%); margin: 70px auto; background: white; border: 1px solid #dce7e3; border-radius: 26px; padding: 34px; box-shadow: 0 22px 60px rgba(20, 76, 62, .08); }
+.brand-manage-login h1, .brand-manage-heading h1 { margin: 8px 0 7px; letter-spacing: -.05em; }
+.brand-manage-login > p, .brand-manage-heading p { color: #72807c; line-height: 1.65; }
+.brand-manage-auth-form { margin-top: 25px; display: grid; gap: 13px; }
+.brand-manage-auth-form label, .brand-package-form label { display: grid; gap: 7px; font-size: .83rem; font-weight: 850; color: #44514e; }
+.brand-manage-auth-form input, .brand-package-form input, .brand-package-form select, .brand-package-form textarea { width: 100%; border: 1px solid #d5e1dd; border-radius: 11px; padding: 12px; font: inherit; outline: none; background: white; }
+.brand-manage-auth-form input:focus, .brand-package-form input:focus, .brand-package-form select:focus, .brand-package-form textarea:focus { border-color: #0f7665; box-shadow: 0 0 0 3px rgba(15,118,101,.08); }
+.brand-package-form small { color: #8b9692; font-weight: 600; line-height: 1.5; }
+.brand-manage-heading { display: flex; justify-content: space-between; gap: 24px; align-items: end; padding: 30px 34px; border-radius: 24px; background: linear-gradient(135deg, #f7fcfa, #e7f5ef); border: 1px solid #d5e6df; }
+.brand-manage-heading-actions { display: flex; gap: 8px; }
+.brand-manage-heading-actions a, .brand-manage-heading-actions button, .brand-text-btn { border: 1px solid #cddbd6; background: white; color: #40504c; border-radius: 10px; padding: 10px 13px; text-decoration: none; font-weight: 850; cursor: pointer; }
+.brand-manage-tabs { display: flex; gap: 8px; margin: 22px 0 16px; }
+.brand-manage-tabs button { border: 1px solid #d7e1de; background: white; color: #5b6864; border-radius: 999px; padding: 10px 16px; font-weight: 900; cursor: pointer; }
+.brand-manage-tabs button.is-active { background: #0f7665; color: white; border-color: #0f7665; }
+.brand-manage-tabs span { min-width: 20px; display: inline-grid; place-items: center; border-radius: 999px; background: rgba(255,255,255,.2); padding: 2px 6px; }
+.brand-manage-layout { display: grid; grid-template-columns: minmax(360px, .9fr) minmax(420px, 1.1fr); gap: 18px; align-items: start; }
+.brand-package-form, .brand-my-packages, #leadsPanel { background: white; border: 1px solid #dce6e2; border-radius: 22px; padding: 24px; }
+.brand-package-form { display: grid; gap: 14px; position: sticky; top: 18px; }
+.brand-manage-form-head, .brand-manage-section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand-manage-form-head h2, .brand-manage-section-title h2 { margin: 5px 0 0; letter-spacing: -.04em; }
+.brand-cover-preview { aspect-ratio: 16 / 8.5; border: 1px dashed #c9d8d3; border-radius: 14px; background: #f6f9f8; display: grid; place-items: center; color: #94a09c; overflow: hidden; }
+.brand-cover-preview img { width: 100%; height: 100%; object-fit: cover; }
+.brand-my-package-list, .brand-lead-list { margin-top: 16px; display: grid; gap: 10px; }
+.brand-my-package-card { border: 1px solid #e0e7e5; border-radius: 16px; padding: 14px; display: grid; grid-template-columns: 105px 1fr; gap: 14px; }
+.brand-my-package-thumb { border-radius: 12px; background: #edf6f2; overflow: hidden; min-height: 95px; display: grid; place-items: center; color: #0f7665; font-weight: 950; }
+.brand-my-package-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.brand-my-package-info { min-width: 0; }
+.brand-my-package-info h3 { margin: 4px 0 5px; font-size: 1rem; }
+.brand-my-package-meta { color: #7b8783; font-size: .76rem; line-height: 1.5; }
+.brand-my-package-price { color: #07594d; font-weight: 950; margin-top: 8px; }
+.brand-my-package-actions { display: flex; gap: 6px; margin-top: 10px; }
+.brand-my-package-actions button { border: 1px solid #d3dfdb; background: white; border-radius: 8px; padding: 7px 10px; color: #46534f; font-size: .76rem; font-weight: 850; cursor: pointer; }
+.brand-my-package-actions button.is-danger { color: #b14848; }
+.brand-package-status { display: inline-flex; border-radius: 999px; padding: 4px 7px; font-size: .67rem; font-weight: 900; background: #eaf7f2; color: #0f7665; }
+.brand-package-status.is-hidden { background: #f1f2f2; color: #777; }
+.brand-lead-card { border: 1px solid #e0e8e5; border-radius: 16px; padding: 18px; display: grid; grid-template-columns: 1fr auto; gap: 12px; }
+.brand-lead-card h3 { margin: 4px 0 8px; }
+.brand-lead-card dl { display: grid; grid-template-columns: 86px 1fr; gap: 5px 8px; margin: 0; font-size: .82rem; }
+.brand-lead-card dt { color: #8b9592; }
+.brand-lead-card dd { margin: 0; color: #3c4946; font-weight: 700; }
+.brand-lead-actions { display: flex; flex-direction: column; gap: 7px; justify-content: center; }
+.brand-lead-actions a { text-decoration: none; border-radius: 9px; padding: 9px 11px; text-align: center; font-size: .78rem; font-weight: 900; }
+.brand-lead-actions a:first-child { background: #0f7665; color: white; }
+.brand-lead-actions a:last-child { border: 1px solid #d1ddd9; color: #45524f; }
+.brand-manage-empty { border: 1px dashed #cedbd6; border-radius: 14px; padding: 45px 16px; text-align: center; color: #89948f; line-height: 1.6; }
+@media (max-width: 820px) {
+  .brand-manage-header-title { display: none; }
+  .brand-manage-main { width: calc(100% - 24px); margin-top: 22px; }
+  .brand-manage-heading { align-items: start; flex-direction: column; padding: 24px; }
+  .brand-manage-layout { grid-template-columns: 1fr; }
+  .brand-package-form { position: static; }
+}
+@media (max-width: 560px) {
+  .brand-manage-main { width: 100%; margin-top: 0; }
+  .brand-manage-login { margin: 20px 12px; width: auto; padding: 24px 18px; }
+  .brand-manage-workspace { padding: 0 12px 30px; }
+  .brand-manage-heading { margin: 0 -12px; border-radius: 0 0 22px 22px; }
+  .brand-manage-tabs { overflow-x: auto; }
+  .brand-package-form, .brand-my-packages, #leadsPanel { padding: 18px; border-radius: 18px; }
+  .brand-form-row { grid-template-columns: 1fr; }
+  .brand-my-package-card { grid-template-columns: 86px 1fr; }
+  .brand-lead-card { grid-template-columns: 1fr; }
+  .brand-lead-actions { flex-direction: row; }
+  .brand-lead-actions a { flex: 1; }
+}
