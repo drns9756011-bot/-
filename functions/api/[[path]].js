@@ -4008,14 +4008,22 @@ async function ensureBrandHallTables(env) {
   }
 }
 
+function normalizePublicBrandChannel(value) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  const compact = text.replace(/\s+/g, "").toLowerCase();
+  if (compact.includes("전자랜드")) return "전자랜드";
+  if (compact.includes("하이마트")) return "하이마트";
+  if (compact.includes("삼성스토어") || compact.includes("samsungstore")) return "삼성스토어";
+  if (compact.includes("lg전자bestshop") || compact.includes("lgbestshop") || compact.includes("lg베스트샵") || compact.includes("베스트샵")) return "LG전자 BEST SHOP";
+  return "";
+}
+
 function normalizeBrandPackage(row, options = {}) {
   if (!row) return null;
   const publicView = options.publicView !== false;
   const normalized = {
     id: row.id,
-    channel: row.channel || "",
-    branch: row.branch || "",
-    branchRegion: row.branch_region || "",
+    channel: publicView ? normalizePublicBrandChannel(row.channel) : (row.channel || ""),
     brand: row.brand || "",
     title: row.title || "",
     items: parseJson(row.items_json, []),
@@ -4027,6 +4035,10 @@ function normalizeBrandPackage(row, options = {}) {
     createdAt: row.created_at || "",
     updatedAt: row.updated_at || "",
   };
+  if (!publicView) {
+    normalized.branch = row.branch || "";
+    normalized.branchRegion = row.branch_region || "";
+  }
   if (!publicView) {
     normalized.sellerId = row.seller_id || "";
     normalized.manager = row.manager || "";
@@ -4082,17 +4094,17 @@ async function getPublicBrandPackages(env, request) {
   await ensureBrandHallTables(env);
   const url = new URL(request.url);
   const brand = String(url.searchParams.get("brand") || "").trim();
-  const region = String(url.searchParams.get("region") || "").trim();
   const channel = String(url.searchParams.get("channel") || "").trim();
   const clauses = ["status = 'active'"];
   const values = [];
   if (brand) { clauses.push("brand = ?"); values.push(brand); }
-  if (region) { clauses.push("branch_region = ?"); values.push(region); }
-  if (channel) { clauses.push("channel = ?"); values.push(channel); }
   const sql = `SELECT * FROM brand_packages WHERE ${clauses.join(" AND ")} ORDER BY updated_at DESC LIMIT 200`;
   const statement = env.DB.prepare(sql);
   const result = values.length ? await statement.bind(...values).all() : await statement.all();
-  return json({ ok: true, rows: (result.results || []).map((row) => normalizeBrandPackage(row, { publicView: true })) });
+  const rows = (result.results || [])
+    .map((row) => normalizeBrandPackage(row, { publicView: true }))
+    .filter((row) => row.channel && (!channel || row.channel === channel));
+  return json({ ok: true, rows });
 }
 
 async function handleBrandSellerPackages(env, request) {
@@ -4281,7 +4293,7 @@ async function createBrandConsultation(env, request) {
   await env.DB.prepare("UPDATE brand_consultations SET delivery_status = ?, delivery_error = ?, updated_at = ? WHERE id = ?")
     .bind(deliveryStatus, deliveryError, new Date().toISOString(), id)
     .run();
-  return json({ ok: true, id, deliveryStatus, message: deliveryStatus === "sent" ? "상담 요청이 담당 매니저에게 전달되었습니다." : "상담 요청이 정상적으로 접수되었습니다." });
+  return json({ ok: true, id, deliveryStatus, message: deliveryStatus === "sent" ? "상담 요청이 등록 판매자에게 전달되었습니다." : "상담 요청이 정상적으로 접수되었습니다." });
 }
 
 export async function onRequest(context) {

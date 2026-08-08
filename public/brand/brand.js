@@ -1,9 +1,8 @@
 (() => {
-  const state = { rows: [], brand: "", region: "", channel: "", selected: null };
+  const state = { rows: [], brand: "", channel: "", selected: null };
   const grid = document.querySelector("#packageGrid");
   const count = document.querySelector("#packageCount");
   const brandFilters = document.querySelector("#brandFilters");
-  const regionFilter = document.querySelector("#regionFilter");
   const channelFilter = document.querySelector("#channelFilter");
   const modal = document.querySelector("#consultModal");
   const form = document.querySelector("#consultForm");
@@ -84,19 +83,19 @@
     }
   }
 
+  const PUBLIC_CHANNELS = ["전자랜드", "하이마트", "삼성스토어", "LG전자 BEST SHOP"];
+
   function populateFilters() {
-    const regions = [...new Set(state.rows.map((row) => row.branchRegion).filter(Boolean))].sort((a,b) => a.localeCompare(b, "ko"));
-    const channels = [...new Set(state.rows.map((row) => row.channel).filter(Boolean))].sort((a,b) => a.localeCompare(b, "ko"));
-    regionFilter.innerHTML = `<option value="">전국</option>${regions.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("")}`;
+    const available = new Set(state.rows.map((row) => row.channel).filter(Boolean));
+    const channels = PUBLIC_CHANNELS.filter((channel) => available.has(channel));
     channelFilter.innerHTML = `<option value="">전체 채널</option>${channels.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("")}`;
   }
 
   function filteredRows() {
     return state.rows.filter((row) => {
       const brandOk = !state.brand || row.brand === state.brand || (state.brand === "기타" && !["LG전자", "삼성전자"].includes(row.brand));
-      const regionOk = !state.region || row.branchRegion === state.region;
       const channelOk = !state.channel || row.channel === state.channel;
-      return brandOk && regionOk && channelOk;
+      return brandOk && channelOk;
     });
   }
 
@@ -115,7 +114,7 @@
         : `<div class="brand-hero-preview-fallback">${escapeHtml((row.brand || "P").slice(0,1))}</div>`;
       return `<article class="brand-hero-preview-card" data-hero-package-id="${escapeHtml(row.id)}">
         <div class="brand-hero-preview-media">${image}</div>
-        <div class="brand-hero-preview-copy"><strong>${escapeHtml(row.title)}</strong><b>${formatPrice(row.salePrice)}~</b><small>${escapeHtml(row.branch || row.channel || "픽견적 브랜드관")}</small></div>
+        <div class="brand-hero-preview-copy"><strong>${escapeHtml(row.title)}</strong><b>${formatPrice(row.salePrice)}~</b><small>${escapeHtml(row.channel || "픽견적 브랜드관")}</small></div>
       </article>`;
     }).join("");
   }
@@ -123,7 +122,7 @@
   function render() {
     renderHeroPreview();
     const rows = filteredRows();
-    count.textContent = rows.length ? `현재 ${rows.length}개의 지점 패키지를 확인할 수 있습니다.` : "조건에 맞는 패키지가 없습니다.";
+    count.textContent = rows.length ? `현재 ${rows.length}개의 패키지를 확인할 수 있습니다.` : "조건에 맞는 패키지가 없습니다.";
     if (!rows.length) {
       grid.innerHTML = `<div class="brand-empty"><b>P</b><h3>등록된 패키지가 아직 없습니다.</h3><p>승인 판매자가 브랜드관에 패키지를 등록하면 이곳에 바로 표시됩니다.</p></div>`;
       return;
@@ -135,7 +134,7 @@
       return `<article class="brand-package-card">
         <div class="brand-package-image">${image}<span class="brand-package-badge">${escapeHtml(row.brand || "다품목")}</span></div>
         <div class="brand-package-body">
-          <div class="brand-package-store"><span>${escapeHtml([row.channel, row.branch].filter(Boolean).join(" "))}</span></div>
+          <div class="brand-package-store"><span>${escapeHtml(row.channel || "판매 채널")}</span></div>
           <h3>${escapeHtml(row.title)}</h3>
           <div class="brand-package-items">${escapeHtml(itemText || "제품 구성은 상담 시 확인해주세요.")}</div>
           ${row.benefits ? `<div class="brand-package-benefits">${escapeHtml(row.benefits)}</div>` : ""}
@@ -155,7 +154,7 @@
     form.elements.packageId.value = row.id;
     message.textContent = "";
     message.classList.remove("is-success");
-    summary.innerHTML = `<span>${escapeHtml([row.channel, row.branch].filter(Boolean).join(" "))}</span><strong>${escapeHtml(row.title)}</strong><b>${formatPrice(row.salePrice)}~</b>`;
+    summary.innerHTML = `<span>${escapeHtml(row.channel || "판매 채널")}</span><strong>${escapeHtml(row.title)}</strong><b>${formatPrice(row.salePrice)}~</b>`;
     modal.hidden = false;
     document.documentElement.style.overflow = "hidden";
     setTimeout(() => form.elements.customerName?.focus(), 30);
@@ -196,7 +195,6 @@
     brandFilters.querySelectorAll("button").forEach((item) => item.classList.toggle("is-active", item === button));
     render();
   });
-  regionFilter?.addEventListener("change", () => { state.region = regionFilter.value; render(); });
   channelFilter?.addEventListener("change", () => { state.channel = channelFilter.value; render(); });
   grid?.addEventListener("click", (event) => { const button = event.target.closest("[data-consult-id]"); if (button) openConsult(button.dataset.consultId); });
   modal?.addEventListener("click", (event) => { if (event.target.closest("[data-close-consult]")) closeConsult(); });
@@ -226,7 +224,7 @@
         }),
       });
       message.classList.add("is-success");
-      message.textContent = result.deliveryStatus === "sent" ? "상담 요청이 담당 매니저에게 전달되었습니다." : "상담 요청이 정상적으로 접수되었습니다. 담당 매니저가 확인 후 연락드립니다.";
+      message.textContent = result.deliveryStatus === "sent" ? "상담 요청이 등록 판매자에게 전달되었습니다." : "상담 요청이 정상적으로 접수되었습니다. 등록 판매자가 확인 후 연락드립니다.";
       submit.textContent = "상담 신청 완료";
       setTimeout(closeConsult, 1700);
     } catch (error) {
