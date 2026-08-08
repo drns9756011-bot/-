@@ -10,6 +10,11 @@
   const summary = document.querySelector("#consultPackageSummary");
   const message = document.querySelector("#consultMessage");
   const money = new Intl.NumberFormat("ko-KR");
+  const heroPreview = document.querySelector("#heroPackagePreview");
+  const heroBrowse = document.querySelector("#heroBrowsePackages");
+  const heroConsult = document.querySelector("#heroConsultFirst");
+  const heroSeeMore = document.querySelector("#heroSeeMore");
+  const packageToolbar = document.querySelector(".brand-hall-toolbar");
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
   const formatPrice = (value) => `${money.format(Number(value || 0))}원`;
@@ -26,11 +31,57 @@
     return `${digits.slice(0,3)}-${digits.slice(3,7)}-${digits.slice(7)}`;
   };
 
+  let serverLoadingDepth = 0;
+  let serverLoadingHideTimer = null;
+
+  function ensureServerLoadingModal() {
+    let loading = document.querySelector("#brandServerLoading");
+    if (loading) return loading;
+    loading = document.createElement("div");
+    loading.id = "brandServerLoading";
+    loading.className = "brand-server-loading";
+    loading.hidden = true;
+    loading.setAttribute("role", "status");
+    loading.setAttribute("aria-live", "polite");
+    loading.setAttribute("aria-label", "서버 요청 처리 중");
+    loading.innerHTML = `<div class="brand-server-loading-backdrop"></div><div class="brand-server-loading-card"><span class="brand-server-loading-spinner" aria-hidden="true"></span><strong>로딩 중입니다.</strong><p>서버와 통신하고 있습니다.<br />잠시만 기다려주세요.</p></div>`;
+    document.body.appendChild(loading);
+    return loading;
+  }
+
+  function showServerLoading() {
+    serverLoadingDepth += 1;
+    if (serverLoadingHideTimer) { clearTimeout(serverLoadingHideTimer); serverLoadingHideTimer = null; }
+    const loading = ensureServerLoadingModal();
+    loading.hidden = false;
+    document.body.classList.add("brand-server-is-loading");
+    document.body.setAttribute("aria-busy", "true");
+  }
+
+  function hideServerLoading() {
+    serverLoadingDepth = Math.max(0, serverLoadingDepth - 1);
+    if (serverLoadingDepth > 0) return;
+    if (serverLoadingHideTimer) clearTimeout(serverLoadingHideTimer);
+    serverLoadingHideTimer = setTimeout(() => {
+      if (serverLoadingDepth > 0) return;
+      const loading = document.querySelector("#brandServerLoading");
+      if (loading) loading.hidden = true;
+      document.body.classList.remove("brand-server-is-loading");
+      document.body.removeAttribute("aria-busy");
+      serverLoadingHideTimer = null;
+    }, 140);
+  }
+
   async function apiJson(path, options = {}) {
-    const response = await fetch(path, { ...options, headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload.ok === false) throw new Error(payload.message || "서버 요청을 처리하지 못했습니다.");
-    return payload;
+    showServerLoading();
+    try {
+      const response = await fetch(path, { ...options, headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.ok === false) throw new Error(payload.message || "서버 요청을 처리하지 못했습니다.");
+      return payload;
+    } finally {
+      hideServerLoading();
+    }
   }
 
   function populateFilters() {
@@ -49,7 +100,28 @@
     });
   }
 
+  function renderHeroPreview() {
+    if (!heroPreview) return;
+    const rows = state.rows.slice(0, 3);
+    if (!rows.length) {
+      heroPreview.innerHTML = `<div class="brand-hero-preview-empty">등록된 패키지를 준비 중입니다.</div>`;
+      if (heroConsult) heroConsult.disabled = true;
+      return;
+    }
+    if (heroConsult) heroConsult.disabled = false;
+    heroPreview.innerHTML = rows.map((row) => {
+      const image = row.coverImage
+        ? `<img src="${escapeHtml(row.coverImage)}" alt="${escapeHtml(row.title)}" loading="eager" />`
+        : `<div class="brand-hero-preview-fallback">${escapeHtml((row.brand || "P").slice(0,1))}</div>`;
+      return `<article class="brand-hero-preview-card" data-hero-package-id="${escapeHtml(row.id)}">
+        <div class="brand-hero-preview-media">${image}</div>
+        <div class="brand-hero-preview-copy"><strong>${escapeHtml(row.title)}</strong><b>${formatPrice(row.salePrice)}~</b><small>${escapeHtml(row.branch || row.channel || "픽견적 브랜드관")}</small></div>
+      </article>`;
+    }).join("");
+  }
+
   function render() {
+    renderHeroPreview();
     const rows = filteredRows();
     count.textContent = rows.length ? `현재 ${rows.length}개의 지점 패키지를 확인할 수 있습니다.` : "조건에 맞는 패키지가 없습니다.";
     if (!rows.length) {
@@ -107,6 +179,15 @@
       grid.innerHTML = `<div class="brand-empty"><b>!</b><h3>브랜드관 정보를 불러오지 못했습니다.</h3><p>${escapeHtml(error.message)}</p></div>`;
     }
   }
+
+  const scrollToPackages = () => packageToolbar?.scrollIntoView({ behavior: "smooth", block: "start" });
+  heroBrowse?.addEventListener("click", scrollToPackages);
+  heroSeeMore?.addEventListener("click", scrollToPackages);
+  heroConsult?.addEventListener("click", () => { if (state.rows[0]) openConsult(state.rows[0].id); else scrollToPackages(); });
+  heroPreview?.addEventListener("click", (event) => {
+    const card = event.target.closest("[data-hero-package-id]");
+    if (card) openConsult(card.dataset.heroPackageId);
+  });
 
   brandFilters?.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-brand]");

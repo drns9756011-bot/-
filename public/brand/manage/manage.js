@@ -23,11 +23,57 @@
   const digits = (value) => Number(String(value || "").replace(/[^0-9]/g, "") || 0);
   const formatDateTime = (value) => value ? new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year:"numeric", month:"numeric", day:"numeric", hour:"numeric", minute:"2-digit" }).format(new Date(value)) : "";
 
+  let serverLoadingDepth = 0;
+  let serverLoadingHideTimer = null;
+
+  function ensureServerLoadingModal() {
+    let loading = document.querySelector("#brandServerLoading");
+    if (loading) return loading;
+    loading = document.createElement("div");
+    loading.id = "brandServerLoading";
+    loading.className = "brand-server-loading";
+    loading.hidden = true;
+    loading.setAttribute("role", "status");
+    loading.setAttribute("aria-live", "polite");
+    loading.setAttribute("aria-label", "서버 요청 처리 중");
+    loading.innerHTML = `<div class="brand-server-loading-backdrop"></div><div class="brand-server-loading-card"><span class="brand-server-loading-spinner" aria-hidden="true"></span><strong>로딩 중입니다.</strong><p>서버와 통신하고 있습니다.<br />잠시만 기다려주세요.</p></div>`;
+    document.body.appendChild(loading);
+    return loading;
+  }
+
+  function showServerLoading() {
+    serverLoadingDepth += 1;
+    if (serverLoadingHideTimer) { clearTimeout(serverLoadingHideTimer); serverLoadingHideTimer = null; }
+    const loading = ensureServerLoadingModal();
+    loading.hidden = false;
+    document.body.classList.add("brand-server-is-loading");
+    document.body.setAttribute("aria-busy", "true");
+  }
+
+  function hideServerLoading() {
+    serverLoadingDepth = Math.max(0, serverLoadingDepth - 1);
+    if (serverLoadingDepth > 0) return;
+    if (serverLoadingHideTimer) clearTimeout(serverLoadingHideTimer);
+    serverLoadingHideTimer = setTimeout(() => {
+      if (serverLoadingDepth > 0) return;
+      const loading = document.querySelector("#brandServerLoading");
+      if (loading) loading.hidden = true;
+      document.body.classList.remove("brand-server-is-loading");
+      document.body.removeAttribute("aria-busy");
+      serverLoadingHideTimer = null;
+    }, 140);
+  }
+
   async function apiJson(path, options = {}) {
-    const response = await fetch(path, { ...options, headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload.ok === false) throw new Error(payload.message || "서버 요청을 처리하지 못했습니다.");
-    return payload;
+    showServerLoading();
+    try {
+      const response = await fetch(path, { ...options, headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.ok === false) throw new Error(payload.message || "서버 요청을 처리하지 못했습니다.");
+      return payload;
+    } finally {
+      hideServerLoading();
+    }
   }
   async function sellerAction(action, extra = {}) {
     return apiJson("/api/brand-seller-packages", { method: "POST", body: JSON.stringify({ action, sellerId: state.sellerId, password: state.password, ...extra }) });
