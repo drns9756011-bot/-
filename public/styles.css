@@ -7817,12 +7817,25 @@ html.is-mobile-device .header-ad-picture img {
 .anonymous-message.is-mine { justify-self: end; background: #e9f0f8; border-color: #b8cbe0; }
 .anonymous-message span { display: block; color: #526579; font-size: 12px; font-weight: 700; margin-bottom: 4px; }
 .anonymous-message p { margin: 0; color: #102b49; white-space: pre-wrap; overflow-wrap: anywhere; }
+.anonymous-read-state { display: block; margin-top: 5px; color: #7890a6; font-size: 10px; text-align: right; }
 .anonymous-message-form { display: grid; gap: 8px; margin: 0; padding: 14px 22px 18px; background: #fff; border-top: 1px solid #dce6ef; }
 .anonymous-message-form textarea { width: 100%; min-height: 88px; resize: vertical; border: 1px solid #b8cbe0; padding: 12px; }
 .anonymous-form-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .anonymous-form-actions small { color: #6b7b8d; }
 .anonymous-consult-btn, .seller-anonymous-consult-btn { margin-top: 8px; }
 .seller-anonymous-consult-btn { border-color: #123f6b; color: #123f6b; font-weight: 800; }
+.seller-chat-room { display: grid; gap: 7px; width: 100%; padding: 16px; border: 1px solid #d5e0eb; border-radius: 10px; background: #fff; color: #17324f; text-align: left; cursor: pointer; }
+.seller-chat-room + .seller-chat-room { margin-top: 8px; }
+.seller-chat-room:hover, .seller-chat-room:focus-visible { border-color: #123f6b; background: #f2f6fa; outline: none; }
+.seller-chat-room-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.seller-chat-room-top strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seller-chat-room > span:not(.seller-chat-room-top) { color: #65778a; font-size: 12px; }
+.seller-chat-room small { overflow: hidden; color: #526579; text-overflow: ellipsis; white-space: nowrap; }
+.seller-chat-empty-detail { padding: 40px 20px; border: 1px dashed #c9d6e3; background: #fff; color: #526579; text-align: center; }
+.seller-chat-empty-detail strong { display: block; color: #123f6b; font-size: 18px; margin-bottom: 8px; }
+.seller-chat-empty-detail p { margin: 0; }
+.seller-chat-tab-badge { display: inline-grid; place-items: center; min-width: 19px; height: 19px; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: #d53c45; color: #fff; font-size: 11px; font-weight: 900; }
+.seller-chat-tab-badge[hidden] { display: none; }
 .anonymous-chat-badge { display: inline-grid; place-items: center; min-width: 21px; height: 21px; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: #d53c45; color: #fff; font-size: 12px; line-height: 1; font-weight: 900; vertical-align: middle; }
 .anonymous-chat-badge[hidden] { display: none; }
 @media (max-width: 560px) { .anonymous-chat-policy { align-items: flex-start; flex-direction: column; gap: 3px; } .anonymous-message { max-width: 88%; } .anonymous-form-actions { align-items: stretch; flex-direction: column; } .anonymous-form-actions button { width: 100%; } }

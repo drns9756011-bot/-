@@ -7,6 +7,7 @@ let uploadedImages = [];
 let businessCardImage = "";
 let activeSellerId = "";
 let activeSellerTab = "all";
+let sellerChatRooms = [];
 let activeSellerBrandFilter = "all";
 let activeSellerRegionFilter = "all";
 let pendingQuoteFormData = null;
@@ -826,6 +827,17 @@ async function refreshAnonymousConsultation(modal) {
     badge.textContent = incomingCount > 99 ? "99+" : String(incomingCount);
     badge.hidden = incomingCount === 0;
   });
+  const counterpartReadAt = activeAnonymousConsultation.role === 'seller' ? result.consultation.customerReadAt : result.consultation.sellerReadAt;
+  list.querySelectorAll('.anonymous-message').forEach((message, index) => {
+    const row = rows[index];
+    if (!row || row.sender_role !== activeAnonymousConsultation.role) return;
+    const read = counterpartReadAt && String(row.created_at || '') <= String(counterpartReadAt);
+    const state = document.createElement('small');
+    state.className = 'anonymous-read-state';
+    state.textContent = read ? '읽음' : '전송됨';
+    message.appendChild(state);
+  });
+  await apiJson(`/api/anonymous-consultations/${encodeURIComponent(activeAnonymousConsultation.id)}/read`, { method: 'POST', showLoading: false, silent: true, body: JSON.stringify({ role: activeAnonymousConsultation.role }) });
   list.scrollTop = list.scrollHeight;
 }
 
@@ -1025,6 +1037,7 @@ async function syncSellerDashboardData(options = {}) {
       syncCustomerQuotesFromServer({ showLoading: false }),
       syncBidsFromServer({ showLoading: false }),
       syncReviewsFromServer({ showLoading: false }),
+      loadSellerChatRooms(),
     ]);
 
     syncResults.forEach((result, index) => {
@@ -1049,6 +1062,26 @@ async function syncSellerDashboardData(options = {}) {
   } finally {
     if (showLoading) hideServerLoading(true);
   }
+}
+
+async function loadSellerChatRooms() {
+  if (!activeSellerId || !canUseApiServer()) return;
+  const result = await apiJson(`/api/anonymous-consultations?sellerId=${encodeURIComponent(activeSellerId)}`, { showLoading: false, silent: true });
+  if (!result?.ok || !Array.isArray(result.rooms)) return;
+  sellerChatRooms = result.rooms;
+  const count = sellerChatRooms.reduce((sum, room) => sum + Number(room.customerMessageCount || 0), 0);
+  const badge = document.querySelector('#sellerChatTabBadge');
+  if (badge) { badge.textContent = count > 99 ? '99+' : String(count); badge.hidden = count === 0; }
+  if (activeSellerTab === 'chat') renderRequests();
+}
+
+function renderSellerChatRooms() {
+  requestList.innerHTML = sellerChatRooms.length ? sellerChatRooms.map((room) => `
+    <button class="seller-chat-room" type="button" data-chat-room-id="${escapeHTML(room.id)}" data-request-id="${escapeHTML(room.quoteId)}" data-bid-id="${escapeHTML(room.bidId)}">
+      <span class="seller-chat-room-top"><strong>${escapeHTML(room.items)}</strong>${Number(room.customerMessageCount || 0) ? `<b class="anonymous-chat-badge">${room.customerMessageCount > 99 ? '99+' : room.customerMessageCount}</b>` : ''}</span>
+      <span>${escapeHTML(room.region || '설치 지역 미입력')} · 견적번호 ${escapeHTML(room.quoteNumber || '-')}</span>
+      <small>${escapeHTML(room.lastMessage)}</small>
+    </button>`).join('') : `<div class="empty-state compact-empty"><strong>진행 중인 익명상담이 없습니다.</strong><p>고객이 질문을 시작하면 이곳에 채팅방이 표시됩니다.</p></div>`;
 }
 
 async function saveReviewToServer(review) {
@@ -3161,7 +3194,15 @@ lookupResults.addEventListener("submit", async (event) => {
   renderLookupResults([request]);
 });
 
-sellerQuoteWorkspace.addEventListener("click", (event) => {
+sellerQuoteWorkspace.addEventListener("click", async (event) => {
+  const chatRoom = event.target.closest('.seller-chat-room');
+  if (chatRoom) {
+    const room = sellerChatRooms.find((item) => String(item.id) === String(chatRoom.dataset.chatRoomId));
+    const request = requests.find((item) => sameId(item.id, chatRoom.dataset.requestId));
+    const bid = bids.find((item) => sameId(item.id, chatRoom.dataset.bidId));
+    if (room && request && bid) await openAnonymousConsultation(request, bid, 'seller');
+    return;
+  }
   const anonymousButton = event.target.closest(".seller-anonymous-consult-btn");
   if (anonymousButton) {
     const request = requests.find((item) => sameId(item.id, anonymousButton.dataset.requestId));
@@ -3547,10 +3588,19 @@ window.addEventListener("afterprint", hideSecurityBlanket);
 
 function renderRequests() {
   const isRegionTab = activeSellerTab === "region";
+  const isChatTab = activeSellerTab === "chat";
   sellerQuoteWorkspace.hidden = isRegionTab;
   sellerRegionPanel.hidden = !isRegionTab;
   const filterHost = document.querySelector("#sellerFilterHost");
-  if (filterHost) filterHost.hidden = isRegionTab;
+  if (filterHost) filterHost.hidden = isRegionTab || isChatTab;
+
+  if (isChatTab) {
+    renderSellerChatRooms();
+    sellerTabs.forEach((tab) => tab.classList.toggle("is-active", tab.dataset.sellerTab === activeSellerTab));
+    setBidFormEnabled(false);
+    selectedInfo.innerHTML = '<div class="seller-chat-empty-detail"><strong>채팅방을 선택하세요.</strong><p>고객 질문이 시작된 익명상담을 왼쪽 목록에서 확인할 수 있습니다.</p></div>';
+    return;
+  }
 
   if (isRegionTab) {
     sellerTabs.forEach((tab) => {

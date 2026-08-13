@@ -4453,7 +4453,30 @@ async function ensureAnonymousConsultationTables(env) {
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS anonymous_seller_restrictions (seller_id TEXT PRIMARY KEY, branch_key TEXT NOT NULL, seller_status TEXT NOT NULL DEFAULT 'ACTIVE', region_status TEXT NOT NULL DEFAULT 'NORMAL', violation_count INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL, last_case_id TEXT DEFAULT '')`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS anonymous_audit_logs (id TEXT PRIMARY KEY, event_type TEXT NOT NULL, case_id TEXT DEFAULT '', consultation_id TEXT DEFAULT '', seller_id TEXT DEFAULT '', payload_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL)`),
   ]);
+  await Promise.all([
+    env.DB.prepare("ALTER TABLE anonymous_consultations ADD COLUMN customer_read_at TEXT DEFAULT ''").run().catch(() => {}),
+    env.DB.prepare("ALTER TABLE anonymous_consultations ADD COLUMN seller_read_at TEXT DEFAULT ''").run().catch(() => {}),
+  ]);
   anonymousConsultationTablesReady = true;
+}
+
+async function cleanupExpiredAnonymousConsultations(env) {
+  await ensureAnonymousConsultationTables(env);
+  const cutoff = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const result = await env.DB.prepare(`SELECT c.id FROM anonymous_consultations c LEFT JOIN customer_quotes q ON q.id = c.quote_id WHERE (c.selected_at != '' AND c.selected_at <= ?) OR (COALESCE(c.selected_at, '') = '' AND q.quote_expires_at != '' AND datetime(q.quote_expires_at) <= datetime(?) )`).bind(cutoff, cutoff).all();
+  let deleted = 0;
+  for (const row of result.results || []) {
+    const id = String(row.id || '');
+    if (!id) continue;
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM anonymous_consultation_messages WHERE consultation_id = ?').bind(id),
+      env.DB.prepare('DELETE FROM anonymous_policy_cases WHERE consultation_id = ?').bind(id),
+      env.DB.prepare('DELETE FROM anonymous_audit_logs WHERE consultation_id = ?').bind(id),
+      env.DB.prepare('DELETE FROM anonymous_consultations WHERE id = ?').bind(id),
+    ]);
+    deleted += 1;
+  }
+  return { consultationsDeleted: deleted };
 }
 
 function normalizeAnonymousMessage(value) {
@@ -4498,6 +4521,22 @@ async function createAnonymousConsultation(env, request) {
 async function getAnonymousConsultation(env, request) {
   await ensureAnonymousConsultationTables(env);
   const url = new URL(request.url);
+  const sellerId = String(url.searchParams.get('sellerId') || '').trim();
+  if (sellerId && !url.searchParams.get('id') && !url.searchParams.get('quoteId')) {
+    const rooms = await env.DB.prepare(`SELECT c.*, q.items, q.quote_number, q.region, b.price,
+      (SELECT body FROM anonymous_consultation_messages m WHERE m.consultation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message,
+      (SELECT COUNT(*) FROM anonymous_consultation_messages m WHERE m.consultation_id = c.id AND m.sender_role = 'customer' AND m.blocked = 0 AND m.created_at > COALESCE(c.seller_read_at, '')) AS customer_message_count
+      FROM anonymous_consultations c
+      LEFT JOIN customer_quotes q ON q.id = c.quote_id
+      LEFT JOIN bids b ON b.id = c.bid_id
+      WHERE c.seller_id = ? ORDER BY c.updated_at DESC LIMIT 200`).bind(sellerId).all();
+    return json({ ok: true, rooms: (rooms.results || []).map((row) => ({
+      id: row.id, quoteId: row.quote_id, bidId: row.bid_id, sellerId: row.seller_id,
+      items: row.items || '견적 상담', quoteNumber: row.quote_number || '', region: row.region || '', price: row.price || 0,
+      status: row.status, lastMessage: row.last_message ? (row.last_message.length > 120 ? `${row.last_message.slice(0, 120)}...` : row.last_message) : '아직 메시지가 없습니다.',
+      customerMessageCount: Number(row.customer_message_count || 0), updatedAt: row.updated_at,
+    })) });
+  }
   let id = String(url.searchParams.get('id') || '').trim();
   if (!id) {
     const quoteId = String(url.searchParams.get('quoteId') || '').trim();
@@ -4515,7 +4554,19 @@ async function getAnonymousConsultation(env, request) {
     ...row,
     body: Number(row.blocked || 0) === 1 ? '개인정보 보호 정책에 의해 내용이 가려졌습니다.' : row.body,
   }));
-  return json({ ok: true, consultation: { id: consultation.id, quoteId: consultation.quote_id, bidId: consultation.bid_id, sellerId: consultation.seller_id, status: consultation.status }, rows: safeRows });
+  return json({ ok: true, consultation: { id: consultation.id, quoteId: consultation.quote_id, bidId: consultation.bid_id, sellerId: consultation.seller_id, status: consultation.status, customerReadAt: consultation.customer_read_at || '', sellerReadAt: consultation.seller_read_at || '' }, rows: safeRows });
+}
+
+async function markAnonymousConsultationRead(env, request, consultationId) {
+  await ensureAnonymousConsultationTables(env);
+  const body = await request.json().catch(() => ({}));
+  const role = String(body.role || '') === 'seller' ? 'seller' : 'customer';
+  const consultation = await env.DB.prepare('SELECT id FROM anonymous_consultations WHERE id = ? LIMIT 1').bind(consultationId).first();
+  if (!consultation) return json({ ok: false, message: '익명상담을 찾을 수 없습니다.' }, 404);
+  const now = new Date().toISOString();
+  const column = role === 'seller' ? 'seller_read_at' : 'customer_read_at';
+  await env.DB.prepare(`UPDATE anonymous_consultations SET ${column} = ?, updated_at = ? WHERE id = ?`).bind(now, now, consultationId).run();
+  return json({ ok: true, role, readAt: now });
 }
 async function postAnonymousConsultationMessage(env, request) {
   await ensureAnonymousConsultationTables(env);
@@ -4532,6 +4583,8 @@ async function postAnonymousConsultationMessage(env, request) {
   const quote = await env.DB.prepare('SELECT selected_bid_id FROM customer_quotes WHERE id = ? LIMIT 1').bind(consultation.quote_id).first();
   if (quote?.selected_bid_id) return json({ ok: false, message: '판매자 선택이 완료되어 익명상담이 종료되었습니다.' }, 403);
   if (role === 'seller' && senderId !== String(consultation.seller_id || '')) return json({ ok: false, message: '판매자 상담 권한을 확인할 수 없습니다.' }, 403);
+  const quoteTiming = await env.DB.prepare('SELECT selected_bid_id, quote_expires_at FROM customer_quotes WHERE id = ? LIMIT 1').bind(consultation.quote_id).first();
+  if (quoteTiming?.selected_bid_id || (quoteTiming?.quote_expires_at && quoteTiming.quote_expires_at < new Date().toISOString())) return json({ ok: false, message: '견적 시간이 종료되어 채팅을 보낼 수 없습니다.' }, 403);
   const prior = await env.DB.prepare('SELECT body FROM anonymous_consultation_messages WHERE consultation_id = ? AND blocked = 0 ORDER BY created_at DESC LIMIT 3').bind(consultationId).all();
   if (role === 'seller' && !(prior.results || []).length) return json({ ok: false, message: '고객이 먼저 질문한 뒤 답변할 수 있습니다.' }, 403);
   const scan = scanAnonymousMessage(message, role, (prior.results || []).reverse().map((row) => row.body));
@@ -4585,6 +4638,9 @@ export async function onRequest(context) {
 
   if (method === "OPTIONS") return new Response(null, { status: 204, headers: jsonHeaders });
   if (!env.DB) return json({ ok: false, message: "D1 DB 바인딩(DB)이 필요합니다." }, 500);
+  if (path.startsWith('anonymous-consultations') || path.startsWith('anonymous-policy-cases')) {
+    await cleanupExpiredAnonymousConsultations(env).catch(() => {});
+  }
 
   if (path === "public-health" && method === "GET") {
     return json({
@@ -4611,6 +4667,7 @@ export async function onRequest(context) {
 
   if (path === "anonymous-consultations" && method === "POST") return apiBoundary(() => createAnonymousConsultation(env, request), "익명상담을 시작하지 못했습니다.");
   if (path === "anonymous-consultations" && method === "GET") return apiBoundary(() => getAnonymousConsultation(env, request), "익명상담을 불러오지 못했습니다.");
+  if (path.startsWith("anonymous-consultations/") && path.endsWith("/read") && method === "POST") return apiBoundary(() => markAnonymousConsultationRead(env, request, decodeURIComponent(pathParts.slice(1, -1).join("/"))), "읽음 상태를 저장하지 못했습니다.");
   if (path === "anonymous-consultation-messages" && method === "POST") return apiBoundary(() => postAnonymousConsultationMessage(env, request), "익명상담 메시지를 처리하지 못했습니다.");
   if (path === "anonymous-policy-cases" && method === "GET") return apiBoundary(() => getAnonymousPolicyCases(env, request), "익명상담 판정 사례를 불러오지 못했습니다.");
   if (path.startsWith("anonymous-policy-cases/") && method === "PATCH") return apiBoundary(() => reviewAnonymousPolicyCase(env, request, decodeURIComponent(pathParts.slice(1).join("/"))), "익명상담 판정을 저장하지 못했습니다.");
@@ -4746,5 +4803,6 @@ export async function onScheduled(context) {
   if (!env.DB) return;
   await closeExpiredQuotes(env);
   await cleanupExpiredStoredData(env);
+  await cleanupExpiredAnonymousConsultations(env);
   await migrateLegacySellerPasswords(env);
 }

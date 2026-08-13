@@ -246,7 +246,7 @@ CREATE INDEX IF NOT EXISTS idx_seller_access_logs_date ON seller_access_logs(acc
 CREATE TABLE IF NOT EXISTS anonymous_consultations (
   id TEXT PRIMARY KEY, quote_id TEXT NOT NULL, bid_id TEXT NOT NULL, seller_id TEXT NOT NULL,
   started_by TEXT NOT NULL DEFAULT 'customer', status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL, selected_at TEXT DEFAULT ''
+  updated_at TEXT NOT NULL, selected_at TEXT DEFAULT '', customer_read_at TEXT DEFAULT '', seller_read_at TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_anon_consultation_bid ON anonymous_consultations(quote_id, bid_id);
 CREATE TABLE IF NOT EXISTS anonymous_consultation_messages (
