@@ -1221,10 +1221,20 @@ async function queueQuoteClosedNotice(env, quote, claimedAt) {
 }
 
 function isTestCustomerName(value) {
+  const compactTestName = String(value || '').replace(/\s+/g, '').toLowerCase();
+  if (compactTestName.includes("\uD14C\uC2A4\uD2B8\uC6A9") || compactTestName.includes("\uD14C\uC2A4\uD2B8") || compactTestName.includes("test")) return true;
   return String(value || "")
     .replace(/\s+/g, "")
     .toLowerCase()
     .includes("테스트용");
+}
+
+function isTestQuote(row) {
+  return isTestCustomerName(row?.customer);
+}
+
+function isMasterSellerId(value) {
+  return String(value || '').trim() === MASTER_SELLER_ID;
 }
 
 async function closeExpiredQuotes(env) {
@@ -2613,6 +2623,7 @@ async function getCustomerQuotes(env, request) {
   const phone = normalizePhone(url.searchParams.get("phone"));
   const quoteNumber = String(url.searchParams.get("quoteNumber") || "").trim();
   const scope = String(url.searchParams.get("scope") || "seller");
+  const sellerId = String(url.searchParams.get("sellerId") || "").trim();
   const now = new Date().toISOString();
   const isAdminView = hasValidAdminToken(request, env);
 
@@ -2635,13 +2646,15 @@ async function getCustomerQuotes(env, request) {
           .all();
     rows = result.results || [];
   } else {
+    const visibilityClause = isAdminView || isMasterSellerId(sellerId)
+      ? ""
+      : " AND customer NOT LIKE '%테스트용%' AND customer NOT LIKE '%테스트%'";
     const result = await env.DB.prepare(
       `SELECT * FROM customer_quotes
-       WHERE personal_expires_at = '' OR personal_expires_at >= ?
+       WHERE (personal_expires_at = '' OR personal_expires_at >= ?)
+         ${visibilityClause}
        ORDER BY created_at DESC`
-    )
-      .bind(now)
-      .all();
+    ).bind(now).all();
     rows = result.results || [];
   }
 
@@ -2854,6 +2867,9 @@ async function getBids(env, request) {
     where.push("b.seller_id = ?");
     bindings.push(sellerId);
   }
+  if (!isAdminView && !isMasterSellerId(sellerId)) {
+    where.push("(q.customer NOT LIKE '%테스트용%' AND q.customer NOT LIKE '%테스트%')");
+  }
   if (where.length) sql += ` WHERE ${where.join(" AND ")}`;
   sql += " ORDER BY b.price ASC, b.created_at ASC";
 
@@ -2947,6 +2963,10 @@ async function createReview(env, request) {
 async function upsertBid(env, request) {
   await closeExpiredQuotes(env);
   const body = await request.json();
+  const visibilityQuote = await env.DB.prepare("SELECT customer FROM customer_quotes WHERE id = ?").bind(body.requestId || "").first();
+  if (isTestQuote(visibilityQuote) && !isMasterSellerId(body.sellerId)) {
+    return json({ ok: false, code: "TEST_QUOTE_MASTER_ONLY", message: "테스트용 견적은 마스터 계정만 확인하고 제안할 수 있습니다." }, 403);
+  }
   if (!body.requestId || !body.sellerId || !body.price) {
     return json({ ok: false, message: "견적, 판매자, 제안 금액이 필요합니다." }, 400);
   }
@@ -3596,6 +3616,7 @@ async function sendFirebasePush(env, token, notification) {
 }
 
 async function notifyPublicAppQuoteCreated(env, quote) {
+  if (isTestQuote(quote)) return { ok: true, sent: 0, failed: 0, skipped: "테스트용 견적은 일반 판매자 알림을 보내지 않습니다." };
   await ensurePushTokenTable(env);
   const tokenRows = await env.DB.prepare(
     `SELECT token FROM push_tokens

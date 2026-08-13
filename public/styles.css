@@ -7787,18 +7787,31 @@ html.is-mobile-device .header-ad-picture img {
   font-variant-numeric: tabular-nums;
 }
 
-.anonymous-consultation-panel { width: min(680px, calc(100vw - 32px)); }
+.anonymous-consultation-panel { width: min(720px, calc(100vw - 32px)); padding: 0; overflow: hidden; border: 1px solid #d7e1ec; box-shadow: 0 24px 70px rgba(14, 39, 66, .2); }
+.anonymous-consultation-panel > .eyebrow, .anonymous-consultation-panel > h2 { display: none; }
+.anonymous-consultation-panel > .modal-close { display: none; }
+.anonymous-chat-header { display: grid; grid-template-columns: 46px minmax(0, 1fr) 36px; gap: 12px; align-items: center; padding: 20px 22px; background: #123f6b; color: #fff; }
+.anonymous-chat-avatar { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; background: #fff; color: #123f6b; font-weight: 900; font-size: 22px; }
+.anonymous-chat-kicker { display: block; color: #bfd2e5; font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+.anonymous-chat-header strong { display: block; font-size: 18px; }
+.anonymous-chat-header p { margin: 4px 0 0; color: #d9e7f4; font-size: 13px; }
+.anonymous-chat-header .modal-close { position: static; width: 36px; height: 36px; color: #fff; border-color: rgba(255,255,255,.55); background: transparent; }
+.anonymous-chat-policy { display: flex; align-items: center; gap: 10px; padding: 11px 22px; background: #f0f5fa; border-bottom: 1px solid #dce6ef; color: #526579; font-size: 12px; }
+.anonymous-chat-policy strong { color: #123f6b; white-space: nowrap; }
 .anonymous-consultation-notice { color: #526579; line-height: 1.6; }
+.anonymous-consultation-panel > .anonymous-consultation-notice { margin: 16px 22px 0; font-size: 13px; }
 .anonymous-message-list { display: grid; gap: 10px; max-height: 360px; overflow: auto; padding: 14px; background: #f4f7fb; border: 1px solid #d8e1eb; }
-.anonymous-message { max-width: 82%; padding: 10px 12px; background: #fff; border: 1px solid #d8e1eb; border-radius: 8px; }
+.anonymous-message { max-width: 78%; padding: 11px 14px; background: #fff; border: 1px solid #d8e1eb; border-radius: 4px 14px 14px 14px; box-shadow: 0 2px 6px rgba(17, 44, 72, .04); }
 .anonymous-message.is-mine { justify-self: end; background: #e9f0f8; border-color: #b8cbe0; }
 .anonymous-message span { display: block; color: #526579; font-size: 12px; font-weight: 700; margin-bottom: 4px; }
 .anonymous-message p { margin: 0; color: #102b49; white-space: pre-wrap; overflow-wrap: anywhere; }
-.anonymous-message-form { display: grid; gap: 8px; margin-top: 14px; }
+.anonymous-message-form { display: grid; gap: 8px; margin: 0; padding: 14px 22px 18px; background: #fff; border-top: 1px solid #dce6ef; }
 .anonymous-message-form textarea { width: 100%; min-height: 88px; resize: vertical; border: 1px solid #b8cbe0; padding: 12px; }
 .anonymous-form-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .anonymous-form-actions small { color: #6b7b8d; }
 .anonymous-consult-btn, .seller-anonymous-consult-btn { margin-top: 8px; }
+.seller-anonymous-consult-btn { border-color: #123f6b; color: #123f6b; font-weight: 800; }
+@media (max-width: 560px) { .anonymous-chat-policy { align-items: flex-start; flex-direction: column; gap: 3px; } .anonymous-message { max-width: 88%; } .anonymous-form-actions { align-items: stretch; flex-direction: column; } .anonymous-form-actions button { width: 100%; } }
 
 
 

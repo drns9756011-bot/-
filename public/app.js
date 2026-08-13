@@ -774,6 +774,7 @@ async function openAnonymousConsultation(request, bid, role = "customer") {
       <form class="anonymous-message-form" data-anonymous-form><textarea name="message" rows="3" maxlength="1000" placeholder="설치, 배송, 혜택 등 조건을 물어보세요." required></textarea><div class="anonymous-form-actions"><small>개인정보·연락처·링크 입력 금지</small><button class="primary-btn" type="submit">메시지 보내기</button></div><p class="form-message" data-anonymous-message></p></form>
     </div>`;
     document.body.appendChild(modal);
+    modal.querySelector('.anonymous-consultation-panel').insertAdjacentHTML('afterbegin', `<div class="anonymous-chat-header"><div class="anonymous-chat-avatar" aria-hidden="true">P</div><div><span class="anonymous-chat-kicker">안전한 견적 상담</span><strong>선택 전 익명상담</strong><p data-anonymous-context>견적 조건을 익명으로 확인하는 중</p></div><button class="modal-close" type="button" data-anonymous-close aria-label="닫기">×</button></div><div class="anonymous-chat-policy"><strong>개인정보 보호 안내</strong><span>전화번호, 링크, 메신저, 매장 정보는 공유할 수 없습니다.</span></div>`);
     modal.addEventListener("click", (event) => { if (event.target === modal || event.target.closest("[data-anonymous-close]")) modal.hidden = true; });
     modal.querySelector("[data-anonymous-form]").addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -793,6 +794,8 @@ async function openAnonymousConsultation(request, bid, role = "customer") {
     if (!result?.ok) { setLookupActionMessage(result?.message || "익명상담을 열지 못했습니다."); return; }
     if (role === "seller" && !result.consultation) { setBidFormMessage("아직 고객 질문이 시작되지 않은 제안입니다.", "normal"); return; }
     activeAnonymousConsultation = { ...(result.consultation || result), role };
+    const contextLabel = modal.querySelector('[data-anonymous-context]');
+    if (contextLabel) contextLabel.textContent = role === 'seller' ? '고객의 질문에 익명으로 답변하세요.' : '선택 전 판매자에게 조건을 물어보세요.';
     modal.hidden = false;
     await refreshAnonymousConsultation(modal);
   } finally { anonymousConsultationLoading = false; }
@@ -925,7 +928,9 @@ function normalizeQuoteRequest(request) {
 
 async function syncCustomerQuotesFromServer(options = {}) {
   const showLoading = options.showLoading !== false;
-  const result = await apiJson("/api/customer-quotes", {
+  const params = new URLSearchParams();
+  if (activeSellerId) params.set("sellerId", activeSellerId);
+  const result = await apiJson(`/api/customer-quotes${params.toString() ? `?${params}` : ""}`, {
     showLoading,
     loadingTitle: "고객님 견적을 불러오는 중입니다.",
     loadingText: "서버에 저장된 견적 정보를 확인하고 있습니다.",
@@ -942,7 +947,9 @@ function replaceBids(rows) {
 
 async function syncBidsFromServer(options = {}) {
   const showLoading = options.showLoading !== false;
-  const result = await apiJson("/api/bids", {
+  const params = new URLSearchParams();
+  if (activeSellerId) params.set("sellerId", activeSellerId);
+  const result = await apiJson(`/api/bids${params.toString() ? `?${params}` : ""}`, {
     showLoading,
     loadingTitle: "판매자 제안을 불러오는 중입니다.",
     loadingText: "서버에 저장된 제안 금액과 순위를 확인하고 있습니다.",
@@ -3708,6 +3715,8 @@ function renderSelectedRequest() {
         : ""
     }
   `;
+  const sellerChatButton = selectedInfo.querySelector('.seller-anonymous-consult-btn');
+  if (sellerChatButton) sellerChatButton.textContent = '익명상담 확인하기';
   sellerImage.innerHTML = isWithoutQuoteRequest(request)
     ? withoutQuoteItemsMarkup(request)
     : quoteImageMarkup(request, `${request.customer} 고객님이 올린 견적서`);
