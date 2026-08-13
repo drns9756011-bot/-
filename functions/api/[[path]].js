@@ -4511,7 +4511,11 @@ async function getAnonymousConsultation(env, request) {
   const consultation = await env.DB.prepare('SELECT * FROM anonymous_consultations WHERE id = ? LIMIT 1').bind(id).first();
   if (!consultation) return json({ ok: false, message: '익명상담을 찾을 수 없습니다.' }, 404);
   const rows = await env.DB.prepare('SELECT id, sender_role, body, blocked, block_reason, created_at FROM anonymous_consultation_messages WHERE consultation_id = ? ORDER BY created_at ASC').bind(id).all();
-  return json({ ok: true, consultation: { id: consultation.id, quoteId: consultation.quote_id, bidId: consultation.bid_id, sellerId: consultation.seller_id, status: consultation.status }, rows: rows.results || [] });
+  const safeRows = (rows.results || []).map((row) => ({
+    ...row,
+    body: Number(row.blocked || 0) === 1 ? '개인정보 보호 정책에 의해 내용이 가려졌습니다.' : row.body,
+  }));
+  return json({ ok: true, consultation: { id: consultation.id, quoteId: consultation.quote_id, bidId: consultation.bid_id, sellerId: consultation.seller_id, status: consultation.status }, rows: safeRows });
 }
 async function postAnonymousConsultationMessage(env, request) {
   await ensureAnonymousConsultationTables(env);
