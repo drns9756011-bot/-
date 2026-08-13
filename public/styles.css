@@ -7788,10 +7788,14 @@ html.is-mobile-device .header-ad-picture img {
 }
 
 .anonymous-consultation-panel { width: min(720px, calc(100vw - 32px)); padding: 0; overflow: hidden; border: 1px solid #d7e1ec; box-shadow: 0 24px 70px rgba(14, 39, 66, .2); }
+.anonymous-consultation-modal { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(8, 24, 42, .58); }
+.anonymous-consultation-modal[hidden] { display: none !important; }
+.anonymous-consultation-panel { max-height: min(760px, calc(100vh - 48px)); overflow-y: auto; }
 .anonymous-consultation-panel > .eyebrow, .anonymous-consultation-panel > h2 { display: none; }
 .anonymous-consultation-panel > .modal-close { display: none; }
 .anonymous-chat-header { display: grid; grid-template-columns: 46px minmax(0, 1fr) 36px; gap: 12px; align-items: center; padding: 20px 22px; background: #123f6b; color: #fff; }
-.anonymous-chat-avatar { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; background: #fff; color: #123f6b; font-weight: 900; font-size: 22px; }
+.anonymous-chat-avatar { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; background: #fff; overflow: hidden; }
+.anonymous-chat-avatar img { width: 30px; height: 30px; object-fit: contain; display: block; }
 .anonymous-chat-kicker { display: block; color: #bfd2e5; font-size: 12px; font-weight: 700; margin-bottom: 3px; }
 .anonymous-chat-header strong { display: block; font-size: 18px; }
 .anonymous-chat-header p { margin: 4px 0 0; color: #d9e7f4; font-size: 13px; }
@@ -7812,6 +7816,7 @@ html.is-mobile-device .header-ad-picture img {
 .anonymous-consult-btn, .seller-anonymous-consult-btn { margin-top: 8px; }
 .seller-anonymous-consult-btn { border-color: #123f6b; color: #123f6b; font-weight: 800; }
 @media (max-width: 560px) { .anonymous-chat-policy { align-items: flex-start; flex-direction: column; gap: 3px; } .anonymous-message { max-width: 88%; } .anonymous-form-actions { align-items: stretch; flex-direction: column; } .anonymous-form-actions button { width: 100%; } }
+@media (max-width: 560px) { .anonymous-consultation-modal { padding: 12px; } .anonymous-consultation-panel { width: 100%; max-height: calc(100vh - 24px); } }
 
 
 
