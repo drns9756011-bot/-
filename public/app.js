@@ -10,6 +10,7 @@ let activeSellerTab = "all";
 let activeSellerBrandFilter = "all";
 let activeSellerRegionFilter = "all";
 let pendingQuoteFormData = null;
+let quoteSubmitInFlight = false;
 let pendingBidSelection = null;
 let pendingQuoteCloseId = null;
 let quoteCloseSubmitting = false;
@@ -17,6 +18,8 @@ let lookupAccessGranted = false;
 let activeLookupRequestIds = [];
 let quoteCountdownTimer = 0;
 let quoteCountdownRefreshQueued = false;
+let activeAnonymousConsultation = null;
+let anonymousConsultationLoading = false;
 
 const ADMIN_EMAIL = "di02013@naver.com";
 const STORAGE_KEYS = {
@@ -86,6 +89,13 @@ const securityBlanket = document.querySelector("#securityBlanket");
 const privacyConsentModal = document.querySelector("#privacyConsentModal");
 const collectionConsent = document.querySelector("#collectionConsent");
 const thirdPartyConsent = document.querySelector("#thirdPartyConsent");
+const serviceNoticeConsent = document.querySelector("#serviceNoticeConsent");
+const customerMarketingConsent = document.querySelector("#customerMarketingConsent");
+const customerConsentAll = document.querySelector("#customerConsentAll");
+const sellerConsentAll = document.querySelector("#sellerConsentAll");
+const sellerPrivacyConsent = document.querySelector("#sellerPrivacyConsent");
+const sellerServiceNoticeConsent = document.querySelector("#sellerServiceNoticeConsent");
+const sellerMarketingConsent = document.querySelector("#sellerMarketingConsent");
 const consentMessage = document.querySelector("#consentMessage");
 const cancelConsentBtn = document.querySelector("#cancelConsentBtn");
 const confirmConsentBtn = document.querySelector("#confirmConsentBtn");
@@ -118,8 +128,12 @@ const serverLoadingTitle = document.querySelector("#serverLoadingTitle");
 const serverLoadingText = document.querySelector("#serverLoadingText");
 const homeLiveBoard = document.querySelector(".pick-live-board");
 const homeReviewGrid = document.querySelector(".pick-review-grid");
+const homeReviewSection = homeReviewGrid?.closest(".pick-review-home");
+const homeCaseStudy = document.querySelector("#homeCaseStudy");
+const homeCaseContent = document.querySelector(".pick-case-content");
 const fallbackHomeLiveHTML = homeLiveBoard?.innerHTML || "";
-const fallbackHomeReviewHTML = homeReviewGrid?.innerHTML || "";
+let homeLiveRelayTimer = 0;
+let homeCaseRelayTimer = 0;
 
 let securityBlanketTimer;
 let serverLoadingCount = 0;
@@ -503,7 +517,7 @@ function openManagerReviewModal(bidId) {
   const safeSeller = escapeHTML(sellerDisplayName);
   const safeManager = escapeHTML(managerDisplayName);
   const reviews = getReviewsForBid(bid);
-  managerReviewTitle.textContent = `${sellerDisplayName} 쨌 ${managerDisplayName}`;
+  managerReviewTitle.textContent = `${sellerDisplayName} · ${managerDisplayName}`;
   managerReviewList.innerHTML = reviews.length
     ? reviews
         .map((review) => {
@@ -744,6 +758,56 @@ async function loginSellerToServer(sellerId, password, options = {}) {
   });
 }
 
+async function openAnonymousConsultation(request, bid, role = "customer") {
+  if (!request || !bid || anonymousConsultationLoading) return;
+  anonymousConsultationLoading = true;
+  let modal = document.querySelector("#anonymousConsultationModal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "anonymousConsultationModal";
+    modal.className = "modal-backdrop anonymous-consultation-modal";
+    modal.innerHTML = `<div class="modal-panel anonymous-consultation-panel" role="dialog" aria-modal="true" aria-labelledby="anonymousConsultationTitle">
+      <button class="modal-close" type="button" data-anonymous-close aria-label="닫기">×</button>
+      <p class="eyebrow">선택 전 익명상담</p><h2 id="anonymousConsultationTitle">궁금한 점을 물어보세요</h2>
+      <p class="anonymous-consultation-notice">고객과 판매자의 이름, 전화번호, 링크, 매장 정보는 선택 전 공개되지 않습니다. 상담은 텍스트만 사용할 수 있습니다.</p>
+      <div class="anonymous-message-list" data-anonymous-messages><p class="empty-state">상담을 불러오는 중입니다.</p></div>
+      <form class="anonymous-message-form" data-anonymous-form><textarea name="message" rows="3" maxlength="1000" placeholder="설치, 배송, 혜택 등 조건을 물어보세요." required></textarea><div class="anonymous-form-actions"><small>개인정보·연락처·링크 입력 금지</small><button class="primary-btn" type="submit">메시지 보내기</button></div><p class="form-message" data-anonymous-message></p></form>
+    </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener("click", (event) => { if (event.target === modal || event.target.closest("[data-anonymous-close]")) modal.hidden = true; });
+    modal.querySelector("[data-anonymous-form]").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const field = event.currentTarget.elements.message;
+      const message = field.value.trim();
+      if (!activeAnonymousConsultation || !message) return;
+      const notice = modal.querySelector("[data-anonymous-message]");
+      const result = await apiJson("/api/anonymous-consultation-messages", { method: "POST", body: JSON.stringify({ consultationId: activeAnonymousConsultation.id, role: activeAnonymousConsultation.role, senderId: activeAnonymousConsultation.role === "seller" ? activeSellerId : "", message }) });
+      if (!result?.ok) { notice.textContent = result?.message || "메시지를 보내지 못했습니다."; notice.dataset.type = "error"; return; }
+      field.value = ""; notice.textContent = ""; await refreshAnonymousConsultation(modal);
+    });
+  }
+  try {
+    let result;
+    if (role === "customer") result = await apiJson("/api/anonymous-consultations", { method: "POST", body: JSON.stringify({ quoteId: request.id, bidId: bid.id, role }) });
+    else result = await apiJson(`/api/anonymous-consultations?quoteId=${encodeURIComponent(request.id)}&bidId=${encodeURIComponent(bid.id)}`, { method: "GET" });
+    if (!result?.ok) { setLookupActionMessage(result?.message || "익명상담을 열지 못했습니다."); return; }
+    if (role === "seller" && !result.consultation) { setBidFormMessage("아직 고객 질문이 시작되지 않은 제안입니다.", "normal"); return; }
+    activeAnonymousConsultation = { ...(result.consultation || result), role };
+    modal.hidden = false;
+    await refreshAnonymousConsultation(modal);
+  } finally { anonymousConsultationLoading = false; }
+}
+
+async function refreshAnonymousConsultation(modal) {
+  if (!activeAnonymousConsultation?.id) return;
+  const result = await apiJson(`/api/anonymous-consultations?id=${encodeURIComponent(activeAnonymousConsultation.id)}`, { method: "GET" });
+  const list = modal.querySelector("[data-anonymous-messages]");
+  if (!result?.ok) { list.innerHTML = `<p class="empty-state">상담 내용을 불러오지 못했습니다.</p>`; return; }
+  const rows = result.rows || [];
+  list.innerHTML = rows.length ? rows.map((row) => `<div class="anonymous-message ${row.sender_role === activeAnonymousConsultation.role ? "is-mine" : ""}"><span>${row.sender_role === "seller" ? "판매자" : "고객"}</span><p>${escapeHTML(row.body)}</p></div>`).join("") : `<p class="empty-state">아직 메시지가 없습니다.</p>`;
+  list.scrollTop = list.scrollHeight;
+}
+
 async function findSellerAccountFromServer(payload) {
   return apiJson("/api/seller-account-find", {
     method: "POST",
@@ -788,6 +852,54 @@ function normalizeQuoteBrand(value) {
   if (compact.includes("lg") || compact.includes("엘지")) return "LG전자";
   if (compact.includes("삼성") || compact.includes("samsung")) return "삼성전자";
   return raw;
+}
+
+function normalizeSellerBidBrandGroup(channelValue) {
+  const compact = String(channelValue || "")
+    .replace(/\s+/g, "")
+    .replace(/[·ㆍ]/g, "")
+    .toLowerCase();
+
+  if (
+    compact.includes("삼성스토어") ||
+    compact.includes("이마트(삼성)") ||
+    compact.includes("이마트삼성") ||
+    compact.includes("전자랜드(삼성)") ||
+    compact.includes("전자랜드삼성")
+  ) return "samsung";
+
+  if (
+    compact.includes("lg전자bestshop") ||
+    compact.includes("lg전자베스트샵") ||
+    compact.includes("이마트(lg)") ||
+    compact.includes("이마트lg") ||
+    compact.includes("전자랜드(lg)") ||
+    compact.includes("전자랜드lg")
+  ) return "lg";
+
+  return "all";
+}
+
+function sellerCanBidQuoteBrand(channelValue, quoteBrandValue) {
+  const group = normalizeSellerBidBrandGroup(channelValue);
+  const brand = normalizeQuoteBrand(quoteBrandValue);
+  if (!brand || brand === "비교견적" || group === "all") return true;
+  if (group === "samsung") return brand === "삼성전자";
+  if (group === "lg") return brand === "LG전자";
+  return true;
+}
+
+function sellerBidBrandRestrictionMessage(channelValue) {
+  const group = normalizeSellerBidBrandGroup(channelValue);
+  if (group === "samsung") return "삼성 계열 판매 채널은 삼성전자 또는 비교견적에만 제안할 수 있습니다.";
+  if (group === "lg") return "LG 계열 판매 채널은 LG전자 또는 비교견적에만 제안할 수 있습니다.";
+  return "현재 판매 채널에서는 이 브랜드 견적에 제안할 수 없습니다.";
+}
+
+function canActiveSellerBidRequest(request) {
+  const account = sellerAccounts.get(activeSellerId);
+  if (!account) return true;
+  return sellerCanBidQuoteBrand(account.channel, getQuoteBrand(request));
 }
 
 function getQuoteBrand(request) {
@@ -884,14 +996,31 @@ async function syncSellerDashboardData(options = {}) {
   }
 
   try {
-    await Promise.all([
+    const syncResults = await Promise.allSettled([
       syncCustomerQuotesFromServer({ showLoading: false }),
       syncBidsFromServer({ showLoading: false }),
       syncReviewsFromServer({ showLoading: false }),
     ]);
-    hydrateApprovedSellerAccounts();
-    renderRequests();
-    renderSelectedRequest();
+
+    syncResults.forEach((result, index) => {
+      if (result.status === "rejected") {
+        const labels = ["고객님 견적", "제안", "후기"];
+        console.warn(`${labels[index]} 동기화에 실패했습니다.`, result.reason);
+      }
+    });
+
+    try {
+      hydrateApprovedSellerAccounts();
+      renderRequests();
+      renderSelectedRequest();
+    } catch (error) {
+      console.warn("판매자 화면을 갱신하지 못했습니다.", error);
+    }
+
+    return {
+      ok: syncResults.some((result) => result.status === "fulfilled"),
+      results: syncResults,
+    };
   } finally {
     if (showLoading) hideServerLoading(true);
   }
@@ -919,7 +1048,15 @@ async function lookupCustomerQuotesFromServer(customer, phone, quoteNumber = "")
     loadingText: "입력하신 성함과 연락처로 견적을 확인하고 있습니다.",
   });
 
-  return result?.ok && Array.isArray(result.rows) ? result.rows : [];
+  if (!result?.ok || !Array.isArray(result.rows)) {
+    return {
+      ok: false,
+      rows: [],
+      message: result?.message || "서버에서 견적 정보를 확인하지 못했습니다. 잠시 후 다시 시도해주세요.",
+    };
+  }
+
+  return { ok: true, rows: result.rows };
 }
 
 async function saveCustomerQuoteToServer(quote) {
@@ -1483,47 +1620,111 @@ function quoteHomeStatus(request, quoteBids) {
   return "판매자 제안 대기";
 }
 
+function stopHomeLiveRelay() {
+  if (!homeLiveRelayTimer) return;
+  window.clearInterval(homeLiveRelayTimer);
+  homeLiveRelayTimer = 0;
+}
+
+function startHomeLiveRelay() {
+  stopHomeLiveRelay();
+  if (!homeLiveBoard || homeLiveBoard.children.length < 2) return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  let index = 0;
+  homeLiveRelayTimer = window.setInterval(() => {
+    const cards = Array.from(homeLiveBoard.children);
+    if (document.hidden || cards.length < 2) return;
+    index = (index + 1) % cards.length;
+    homeLiveBoard.scrollTo({ left: cards[index].offsetLeft - homeLiveBoard.offsetLeft, behavior: "smooth" });
+  }, 4200);
+}
+
+function stopHomeCaseRelay() {
+  if (!homeCaseRelayTimer) return;
+  window.clearInterval(homeCaseRelayTimer);
+  homeCaseRelayTimer = 0;
+}
+
+function startHomeCaseRelay() {
+  stopHomeCaseRelay();
+  if (!homeCaseContent || homeCaseContent.children.length < 2) return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  let index = 0;
+  homeCaseRelayTimer = window.setInterval(() => {
+    const cards = Array.from(homeCaseContent.children);
+    if (document.hidden || cards.length < 2) return;
+    index = (index + 1) % cards.length;
+    homeCaseContent.scrollTo({
+      left: cards[index].offsetLeft - homeCaseContent.offsetLeft,
+      behavior: index === 0 ? "auto" : "smooth",
+    });
+  }, 4600);
+}
+
 function renderHomeFeeds() {
   if (homeLiveBoard) {
+    stopHomeLiveRelay();
     const quoteRows = requests
-      .slice()
-      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+      .map((request) => {
+        const quoteBids = bids
+          .filter((bid) => sameId(bid.requestId, request.id) && Number(bid.price) > 0)
+          .sort((a, b) => Number(a.price) - Number(b.price));
+        const originalPrice = Number(request.price) || 0;
+        const selectedBid = getSelectedBid(request);
+        const selectedPrice = Number(selectedBid?.price) || 0;
+        const lowestBid = quoteBids[0] || null;
+        const offerBid = selectedPrice > 0 && selectedPrice < originalPrice ? selectedBid : lowestBid;
+        const offerPrice = Number(offerBid?.price) || 0;
+        return { request, quoteBids, originalPrice, offerPrice };
+      })
+      .filter((row) => row.originalPrice > 0 && row.offerPrice > 0 && row.offerPrice < row.originalPrice)
+      .sort((a, b) => {
+        const aSelected = hasValidSelectedBid(a.request) ? 1 : 0;
+        const bSelected = hasValidSelectedBid(b.request) ? 1 : 0;
+        return bSelected - aSelected || new Date(b.request.createdAt || 0) - new Date(a.request.createdAt || 0);
+      })
       .slice(0, 8);
 
     if (quoteRows.length) {
-      homeLiveBoard.innerHTML = duplicateRelayRows(quoteRows)
-        .map((request) => {
-          const quoteBids = bids.filter((bid) => sameId(bid.requestId, request.id));
-          const bidPrices = quoteBids.map((bid) => Number(bid.price || 0)).filter(Boolean);
-          const lowestBidPrice = bidPrices.length ? Math.min(...bidPrices) : 0;
-          const priceText = lowestBidPrice
-            ? `최저 제안 ${formatPrice(lowestBidPrice)}`
-            : request.price
-              ? `${getRequestPriceLabel(request)} ${formatPrice(request.price)}`
-              : getQuoteTypeLabel(request);
+      homeLiveBoard.innerHTML = quoteRows
+        .map(({ request, quoteBids, originalPrice, offerPrice }) => {
+          const region = String(request.region || request.installRegion || "지역 확인 중").trim();
+          const purpose = String(request.purchasePurpose || "가전 견적").trim();
+          const savings = originalPrice - offerPrice;
           return `
             <article>
-              <span>${escapeHTML(request.purchasePurpose || getQuoteBrand(request) || "가전 견적")}</span>
-              <strong>${escapeHTML(priceText)}</strong>
+              <span>${escapeHTML(region)} · ${escapeHTML(purpose)}</span>
+              <strong>${escapeHTML(hasValidSelectedBid(request) ? "제안 선택 완료" : `제안 ${quoteBids.length}건 도착`)}</strong>
               <p>${escapeHTML(homeQuoteTitle(request))}</p>
-              <em>${escapeHTML(quoteHomeStatus(request, quoteBids))}</em>
+              <em>${escapeHTML(`${formatPrice(savings)} 낮은 제안 확인`)}</em>
             </article>
           `;
         })
         .join("");
+      window.requestAnimationFrame(startHomeLiveRelay);
     } else {
-      homeLiveBoard.innerHTML = fallbackHomeLiveHTML;
+      homeLiveBoard.innerHTML = `<article class="pick-empty-feed"><strong>비교 가능한 견적을 준비하고 있습니다.</strong><p>기존 견적보다 낮은 실제 제안만 이곳에 표시합니다.</p></article>`;
     }
   }
 
   if (homeReviewGrid) {
+    const seenReviews = new Set();
     const reviewRows = managerReviews
       .filter((review) => review.content)
       .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-      .slice(0, 8);
+      .filter((review) => {
+        const key = `${String(review.customer || "").trim()}|${String(review.content || "").trim()}`;
+        if (seenReviews.has(key)) return false;
+        seenReviews.add(key);
+        return true;
+      })
+      .slice(0, 6);
 
-    if (reviewRows.length) {
-      homeReviewGrid.innerHTML = duplicateRelayRows(reviewRows)
+    if (reviewRows.length >= 4) {
+      if (homeReviewSection) homeReviewSection.hidden = false;
+      homeReviewGrid.innerHTML = reviewRows
         .map((review) => `
           <article>
             <span>${escapeHTML(starText(review.rating || 5))}</span>
@@ -1533,7 +1734,82 @@ function renderHomeFeeds() {
         `)
         .join("");
     } else {
-      homeReviewGrid.innerHTML = fallbackHomeReviewHTML;
+      if (homeReviewSection) homeReviewSection.hidden = true;
+      homeReviewGrid.innerHTML = "";
+    }
+  }
+
+  if (homeCaseStudy && homeCaseContent) {
+    stopHomeCaseRelay();
+    const caseRows = requests
+      .map((request) => {
+        const sellerBids = new Map();
+        bids
+          .filter((bid) => sameId(bid.requestId, request.id) && Number(bid.price) > 0)
+          .forEach((bid) => {
+            const sellerKey = String(bid.sellerId || `${bid.seller || ""}|${bid.manager || ""}`).trim();
+            const current = sellerBids.get(sellerKey);
+            if (!current || Number(bid.price) < Number(current.price)) sellerBids.set(sellerKey, bid);
+          });
+
+        return {
+          request,
+          quoteBids: [...sellerBids.values()].sort((a, b) => Number(a.price) - Number(b.price)),
+        };
+      })
+      .filter((row) => {
+        const originalPrice = Number(row.request.price) || 0;
+        return originalPrice > 0 && row.quoteBids.length && Number(row.quoteBids[0].price) < originalPrice;
+      })
+      .sort((a, b) => {
+        const bidCountDifference = b.quoteBids.length - a.quoteBids.length;
+        if (bidCountDifference) return bidCountDifference;
+
+        const aSaving = Number(a.request.price) - Number(a.quoteBids[0].price);
+        const bSaving = Number(b.request.price) - Number(b.quoteBids[0].price);
+        if (bSaving !== aSaving) return bSaving - aSaving;
+
+        return new Date(b.request.createdAt || 0) - new Date(a.request.createdAt || 0);
+      })
+      .slice(0, 8);
+
+    if (!caseRows.length) {
+      homeCaseStudy.hidden = true;
+      homeCaseContent.innerHTML = "";
+    } else {
+      homeCaseStudy.hidden = false;
+      homeCaseContent.innerHTML = caseRows
+        .map(({ request, quoteBids }) => {
+          const originalPrice = Number(request.price) || 0;
+          const region = String(request.region || request.installRegion || "지역 비공개").trim();
+          const purpose = String(request.purchasePurpose || "가전 견적 비교").trim();
+          const comparedBids = quoteBids.slice(0, 3);
+
+          return `
+            <article>
+              <div class="pick-case-copy">
+                <span>실제 비교 사례</span>
+                <h3>${escapeHTML(region)} · ${escapeHTML(purpose)}</h3>
+                <p>${escapeHTML(homeQuoteTitle(request))}</p>
+              </div>
+              <div class="pick-case-prices">
+                <div><span>기존 견적</span><strong>${escapeHTML(formatPrice(originalPrice))}</strong></div>
+                <div class="pick-case-summary"><span>받은 제안</span><strong>${escapeHTML(`${quoteBids.length}건 비교`)}</strong></div>
+                <ol class="pick-case-bid-list" aria-label="실제 판매자 제안 금액">
+                  ${comparedBids.map((bid, index) => `
+                    <li class="${index === 0 ? "is-lowest" : ""}">
+                      <span>제안 ${index + 1}</span>
+                      <strong>${escapeHTML(formatPrice(bid.price))}</strong>
+                      ${index === 0 ? "<em>최저</em>" : ""}
+                    </li>
+                  `).join("")}
+                </ol>
+              </div>
+            </article>
+          `;
+        })
+        .join("");
+      startHomeCaseRelay();
     }
   }
 }
@@ -1570,7 +1846,7 @@ function getSellerTabRequests() {
     return requests.filter((request) => isQuoteClosed(request));
   }
 
-  return requests.filter((request) => !isQuoteClosed(request));
+  return requests.filter((request) => !isQuoteClosed(request) && canActiveSellerBidRequest(request));
 }
 
 function getAvailableSellerBrands(baseRequests = getSellerTabRequests()) {
@@ -1821,6 +2097,7 @@ function renderBidCards(request) {
             }" data-bid-id="${bid.id}" ${isLockedBySelection && !isSelected ? "disabled" : ""}>
               ${isSelected ? "선택 완료" : isLockedBySelection ? "선택 변경 불가" : "이 제안 선택"}
             </button>
+            ${!isSelected && !isLockedBySelection ? `<button class="secondary-btn full anonymous-consult-btn" type="button" data-request-id="${request.id}" data-bid-id="${bid.id}">궁금한 점 물어보기</button>` : ""}
             ${reviewArea}
           </div>
         </article>
@@ -1842,10 +2119,14 @@ function resetCustomerForm() {
 async function createCustomerRequestOnServer(formData) {
   showServerLoading("견적 요청을 등록 중입니다.", "견적서 이미지와 입력 내용을 처리하고 있습니다.");
   try {
-    await new Promise((resolve) => window.setTimeout(resolve, 450));
-    await createCustomerRequest(formData);
+    return await createCustomerRequest(formData);
+  } catch (error) {
+    console.error("견적 요청 등록에 실패했습니다.", error);
+    const message = "견적 요청을 처리하지 못했습니다. 입력 내용을 확인한 뒤 다시 시도해주세요.";
+    setRequestFormMessage(message, "error");
+    return { ok: false, message };
   } finally {
-    hideServerLoading();
+    hideServerLoading(true);
   }
 }
 
@@ -1867,9 +2148,41 @@ function openConsentModal(formData) {
   pendingQuoteFormData = formData;
   collectionConsent.checked = false;
   thirdPartyConsent.checked = false;
+  serviceNoticeConsent.checked = false;
+  customerMarketingConsent.checked = false;
+  customerConsentAll.checked = false;
   setConsentMessage("");
   privacyConsentModal.hidden = false;
 }
+
+function syncConsentAll(master, fields) {
+  if (!master) return;
+  master.checked = fields.length > 0 && fields.every((field) => field?.checked);
+}
+
+customerConsentAll?.addEventListener("change", () => {
+  [collectionConsent, thirdPartyConsent, serviceNoticeConsent, customerMarketingConsent].forEach((field) => {
+    if (field) field.checked = customerConsentAll.checked;
+  });
+});
+
+[collectionConsent, thirdPartyConsent, serviceNoticeConsent, customerMarketingConsent].forEach((field) => {
+  field?.addEventListener("change", () => {
+    syncConsentAll(customerConsentAll, [collectionConsent, thirdPartyConsent, serviceNoticeConsent, customerMarketingConsent]);
+  });
+});
+
+sellerConsentAll?.addEventListener("change", () => {
+  [sellerPrivacyConsent, sellerServiceNoticeConsent, sellerMarketingConsent].forEach((field) => {
+    if (field) field.checked = sellerConsentAll.checked;
+  });
+});
+
+[sellerPrivacyConsent, sellerServiceNoticeConsent, sellerMarketingConsent].forEach((field) => {
+  field?.addEventListener("change", () => {
+    syncConsentAll(sellerConsentAll, [sellerPrivacyConsent, sellerServiceNoticeConsent, sellerMarketingConsent]);
+  });
+});
 
 function closeConsentModal() {
   pendingQuoteFormData = null;
@@ -1905,6 +2218,9 @@ async function createCustomerRequest(formData) {
     consent: {
       collectionUse: true,
       thirdPartyProvision: true,
+      serviceNoticeAlimtalk: true,
+      customerMarketing: Boolean(customerMarketingConsent?.checked),
+      consentVersion: "20260813-consent-v1",
       agreedAt: new Date().toISOString(),
       retention: {
         fullQuoteImagesDays: 7,
@@ -1919,8 +2235,9 @@ async function createCustomerRequest(formData) {
   if (canUseApiServer()) {
     const serverResult = await saveCustomerQuoteToServer(newRequest);
     if (!serverResult?.ok || !serverResult.row) {
-      setRequestFormMessage(serverResult?.message || "견적 요청을 서버에 저장하지 못했습니다. 잠시 후 다시 시도해주세요.", "error");
-      return;
+      const message = serverResult?.message || "견적 요청을 서버에 저장하지 못했습니다. 잠시 후 다시 시도해주세요.";
+      setRequestFormMessage(message, "error");
+      return { ok: false, message };
     }
     savedRequest = serverResult.row;
   }
@@ -1932,6 +2249,7 @@ async function createCustomerRequest(formData) {
   renderSelectedRequest();
   resetCustomerForm();
   setView("lookup");
+  return { ok: true, row: savedRequest };
 }
 
 function openBidSelectConfirmModal(request, bid) {
@@ -2637,35 +2955,65 @@ sellerRegisterCompleteModal?.addEventListener("click", (event) => {
   }
 });
 
-confirmConsentBtn.addEventListener("click", () => {
-  if (!collectionConsent.checked || !thirdPartyConsent.checked) {
+confirmConsentBtn.addEventListener("click", async () => {
+  if (!collectionConsent.checked || !thirdPartyConsent.checked || !serviceNoticeConsent.checked) {
     setConsentMessage("필수 동의 항목을 모두 체크해야 견적 요청을 등록할 수 있습니다.", "error");
     return;
   }
 
-  if (pendingQuoteFormData) {
-    createCustomerRequestOnServer(pendingQuoteFormData);
-  }
+  if (!pendingQuoteFormData || quoteSubmitInFlight) return;
 
-  closeConsentModal();
+  quoteSubmitInFlight = true;
+  confirmConsentBtn.disabled = true;
+  const previousLabel = confirmConsentBtn.textContent;
+  confirmConsentBtn.textContent = "등록 중...";
+  setConsentMessage("");
+
+  try {
+    const result = await createCustomerRequestOnServer(pendingQuoteFormData);
+    if (result?.ok) {
+      closeConsentModal();
+      return;
+    }
+
+    setConsentMessage(result?.message || "견적 요청을 등록하지 못했습니다. 잠시 후 다시 시도해주세요.", "error");
+  } finally {
+    quoteSubmitInFlight = false;
+    confirmConsentBtn.disabled = false;
+    confirmConsentBtn.textContent = previousLabel;
+  }
 });
 
 lookupForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(lookupForm);
-  const customer = normalizeName(formData.get("lookupCustomer"));
+  const enteredCustomer = String(formData.get("lookupCustomer") || "").trim();
+  const customer = normalizeName(enteredCustomer);
   const phone = normalizePhone(formData.get("lookupPhone"));
 
-  lookupAccessGranted = true;
-  if (!customer || !phone) {
-    renderLookupResults([]);
+  if (!customer || phone.length < 9) {
+    lookupAccessGranted = false;
+    renderLookupResults([], "성함과 휴대전화로 등록한 견적을 조회하세요.");
+    setLookupActionMessage("견적 등록 시 입력한 고객님 성함과 연락처를 정확히 입력해주세요.");
     return;
   }
 
-  const serverMatches = canUseApiServer() ? await lookupCustomerQuotesFromServer(formData.get("lookupCustomer").trim(), phone) : [];
+  const lookupResult = canUseApiServer()
+    ? await lookupCustomerQuotesFromServer(enteredCustomer, phone)
+    : { ok: true, rows: [] };
+
+  if (!lookupResult.ok) {
+    lookupAccessGranted = false;
+    renderLookupResults([], "성함과 휴대전화로 등록한 견적을 조회하세요.");
+    setLookupActionMessage(lookupResult.message);
+    return;
+  }
+
+  lookupAccessGranted = true;
+  const serverMatches = lookupResult.rows;
   if (serverMatches.length && canUseApiServer()) {
     mergeRequests(serverMatches);
-    await Promise.all([
+    await Promise.allSettled([
       syncBidsFromServer(),
       syncReviewsFromServer({ showLoading: false }),
     ]);
@@ -2679,7 +3027,7 @@ lookupForm.addEventListener("submit", async (event) => {
   renderLookupResults(matches);
 });
 
-lookupResults.addEventListener("click", (event) => {
+lookupResults.addEventListener("click", async (event) => {
   const lookupImage = event.target.closest(".lookup-image img");
   if (lookupImage) {
     openQuoteImageModal(lookupImage.src, lookupImage.alt || "견적서 원본 이미지");
@@ -2711,6 +3059,14 @@ lookupResults.addEventListener("click", (event) => {
       return;
     }
     openQuoteCloseConfirmModal(request);
+    return;
+  }
+
+  const anonymousButton = event.target.closest(".anonymous-consult-btn");
+  if (anonymousButton) {
+    const request = requests.find((item) => sameId(item.id, anonymousButton.dataset.requestId));
+    const bid = bids.find((item) => sameId(item.id, anonymousButton.dataset.bidId));
+    if (request && bid) await openAnonymousConsultation(request, bid, "customer");
     return;
   }
 
@@ -2781,6 +3137,13 @@ lookupResults.addEventListener("submit", async (event) => {
 });
 
 sellerQuoteWorkspace.addEventListener("click", (event) => {
+  const anonymousButton = event.target.closest(".seller-anonymous-consult-btn");
+  if (anonymousButton) {
+    const request = requests.find((item) => sameId(item.id, anonymousButton.dataset.requestId));
+    const bid = bids.find((item) => sameId(item.id, anonymousButton.dataset.bidId));
+    if (request && bid) openAnonymousConsultation(request, bid, "seller");
+    return;
+  }
   const button = event.target.closest(".sale-complete-btn");
   if (!button || button.disabled) return;
 
@@ -2812,7 +3175,7 @@ sellerLoginForm.addEventListener("submit", async (event) => {
   try {
     showServerLoading(
       "판매자 페이지를 준비 중입니다.",
-      "로그인 확인 후 고객님 견적과 제안 정보를 한 번에 불러오고 있습니다."
+      "로그인 정보를 확인하고 있습니다."
     );
 
     const loginResult = await loginSellerToServer(loginId, loginPassword, { showLoading: false });
@@ -2848,8 +3211,15 @@ sellerLoginForm.addEventListener("submit", async (event) => {
     if (bidForm.elements.managerName) bidForm.elements.managerName.value = account.manager || "";
     if (bidForm.elements.managerPhone) bidForm.elements.managerPhone.value = formatPhoneNumber(account.phone || "");
 
-    await syncSellerDashboardData({ showLoading: false });
     setView("seller", { replacePath: true });
+    hideServerLoading(true);
+
+    try {
+      await syncSellerDashboardData({ showLoading: true });
+    } catch (error) {
+      console.warn("로그인은 완료됐지만 판매자 데이터를 모두 불러오지 못했습니다.", error);
+      setBidFormMessage("로그인은 완료되었습니다. 일부 정보를 불러오지 못한 경우 새로고침해주세요.", "error");
+    }
   } catch (error) {
     activeSellerId = "";
     writeActiveSellerSession("");
@@ -2888,6 +3258,11 @@ bidForm.addEventListener("submit", async (event) => {
 
   if (!request) {
     setBidFormMessage("제안할 고객님 견적을 먼저 선택해주세요.", "error");
+    return;
+  }
+
+  if (!sellerCanBidQuoteBrand(channelName, getQuoteBrand(request))) {
+    setBidFormMessage(sellerBidBrandRestrictionMessage(channelName), "error");
     return;
   }
 
@@ -3011,6 +3386,9 @@ sellerRegisterForm.addEventListener("submit", async (event) => {
       consent: {
         privacyUse: true,
         customerDisclosure: true,
+        serviceNoticeAlimtalk: true,
+        sellerMarketing: Boolean(sellerMarketingConsent?.checked),
+        consentVersion: "20260813-consent-v1",
         agreedAt: new Date().toISOString(),
       },
       memo: sellerMemo,
@@ -3300,6 +3678,7 @@ function renderSelectedRequest() {
       <span>요청사항</span>
       <p>${safeMemo}</p>
     </div>
+    ${activeSellerBid ? `<button class="secondary-btn full seller-anonymous-consult-btn" type="button" data-request-id="${request.id}" data-bid-id="${activeSellerBid.id}">고객 질문 확인하기</button>` : ""}
     <p class="privacy-note">${
       isSaleCompleted
         ? `판매완료 처리되었습니다. 고객님 후기 요청 알림톡 발송 상태: ${

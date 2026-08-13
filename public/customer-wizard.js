@@ -1,4 +1,4 @@
-﻿(() => {
+(() => {
   const form = document.querySelector("#requestForm");
   if (!form) return;
 
@@ -45,6 +45,7 @@
     catalogs: {},
     lowestPriceCache: new Map(),
     modelLearning: null,
+    productLearning: null,
     recommendationGroups: [],
     recommending: false,
     recommendationMode: "",
@@ -662,10 +663,46 @@
     updatePreview();
   }
 
+  function isMobileWizardViewport() {
+    return window.matchMedia?.("(max-width: 720px)")?.matches ?? window.innerWidth <= 720;
+  }
+
+  function guardMobileStepScroll(previousScrollY) {
+    if (!isMobileWizardViewport()) return;
+
+    const preventDownwardJump = () => {
+      // 단계 전환 직후 DOM 높이가 달라지면 모바일 Safari/Chrome의
+      // scroll anchoring이 클릭 지점을 따라 아래로 이동시키는 경우가 있다.
+      // 사용자가 누르기 직전 위치보다 아래로 밀린 경우에만 원래 위치로 복원한다.
+      if (window.scrollY > previousScrollY + 2) {
+        window.scrollTo({ top: previousScrollY, left: window.scrollX, behavior: "auto" });
+      }
+    };
+
+    preventDownwardJump();
+    requestAnimationFrame(() => {
+      preventDownwardJump();
+      requestAnimationFrame(preventDownwardJump);
+    });
+    [60, 140, 260].forEach((delay) => window.setTimeout(preventDownwardJump, delay));
+  }
+
   function move(delta) {
     if (delta > 0 && !validateCurrentStep()) return;
+
+    const mobile = isMobileWizardViewport();
+    const previousScrollY = mobile ? window.scrollY : 0;
+
+    // 키보드/포커스가 남아 있는 상태에서 단계 DOM이 교체되면 iOS Safari가
+    // 포커스 위치를 맞추기 위해 추가 스크롤을 만들 수 있으므로 먼저 해제한다.
+    if (mobile && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+
     state.stepIndex = Math.max(0, Math.min(visibleSteps().length - 1, state.stepIndex + delta));
     render();
+
+    if (mobile) guardMobileStepScroll(previousScrollY);
   }
 
   function validateCurrentStep() {
@@ -688,12 +725,28 @@
   }
 
   function renderQuoteType() {
+    const brandGuide = fields.quoteType.value === "without_quote"
+      ? `
+        <aside class="wizard-brand-guide">
+          <div class="wizard-brand-guide-copy">
+            <span>제품 선택이 막막하신가요?</span>
+            <strong>브랜드관에서 제품과 패키지를 먼저 살펴보세요.</strong>
+            <p>제품을 살펴본 뒤 필요한 품목만 선택해 견적을 요청할 수 있습니다.</p>
+          </div>
+          <div class="wizard-brand-guide-links">
+            <a href="/brand"><img src="/assets/brand-hero-lg-products.png" alt="LG전자 제품" /><span>LG전자 브랜드관</span></a>
+            <a href="/brand"><img src="/assets/brand-hero-samsung-products.png" alt="삼성전자 제품" /><span>삼성전자 브랜드관</span></a>
+          </div>
+        </aside>
+      `
+      : "";
     return `
       <h3>견적서가 있는지 먼저 선택해주세요.</h3>
       <p>견적서 유무에 따라 필요한 입력 단계가 달라집니다.</p>
       <div class="wizard-choice-grid wizard-choice-grid-two">
         ${quoteTypes.map((item) => choiceCard(item, "wizardQuoteTypeProxy", fields.quoteType.value)).join("")}
       </div>
+      ${brandGuide}
     `;
   }
 
@@ -1757,8 +1810,10 @@ function buildAiSummary() {
       const response = await fetchWithTimeout("/api/lplan-model-learning", { cache: "no-store" }, 9000);
       const data = response.ok ? await response.json() : null;
       state.modelLearning = data?.ok && data.modelCounts ? data.modelCounts : {};
+      state.productLearning = data?.ok && data.productCounts ? data.productCounts : {};
     } catch {
       state.modelLearning = {};
+      state.productLearning = {};
     }
     return state.modelLearning;
   }
@@ -2167,6 +2222,8 @@ function buildAiSummary() {
     let score = 0;
     const learnedCount = modelLearningCount(model);
     if (learnedCount > 0) score -= Math.min(0.3, Math.log2(learnedCount + 1) * 0.06);
+    const productCount = productLearningCount(productKey);
+    if (productCount > 0) score -= Math.min(0.12, Math.log2(productCount + 1) * 0.025);
     if (productKey === "TV") {
       if (/OLED|QNED9|QNED8/.test(name)) score -= 0.22;
       if (/^(KQ|QN).*9|OLED|NEO/.test(name) || /NEO QLED|OLED/.test(text)) score -= 0.18;
@@ -2209,6 +2266,17 @@ function buildAiSummary() {
     return Math.max(exactCount, bodyCount);
   }
 
+  function productLearningCount(product) {
+    const counts = state.productLearning || {};
+    const target = compactModelName(product);
+    return Object.entries(counts).reduce((max, [name, value]) => {
+      const normalized = compactModelName(name);
+      return normalized === target || normalized.includes(target) || target.includes(normalized)
+        ? Math.max(max, Number(value || 0))
+        : max;
+    }, 0);
+  }
+
   function extractTvInches(modelName) {
     const name = String(modelName || "").toUpperCase().replace(/\s+/g, "");
     const patterns = [
@@ -2235,14 +2303,14 @@ function buildAiSummary() {
   }
 
   async function fetchLowestPrice(modelName) {
-    const cacheKey = compactModelName(modelName);
+    const cacheKey = modelBody(modelName);
     if (!cacheKey) return 0;
     if (state.lowestPriceCache.has(cacheKey)) return state.lowestPriceCache.get(cacheKey);
 
     const request = (async () => {
       try {
         const response = await fetchWithTimeout(
-          `/api/naver-shopping-lowest?query=${encodeURIComponent(modelName)}&display=30`,
+          `/api/naver-shopping-lowest?query=${encodeURIComponent(cacheKey)}&display=30`,
           { cache: "no-store" },
           12000
         );
@@ -2374,4 +2442,3 @@ function buildAiSummary() {
       .replace(/'/g, "&#39;");
   }
 })();
-

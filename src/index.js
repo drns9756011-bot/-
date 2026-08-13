@@ -3,7 +3,7 @@ import { onRequest, onScheduled } from "../functions/api/[[path]].js";
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const routeVersion = "20260808-brand-channel-only-v5";
+    const routeVersion = "20260811-main-redesign-v21-worker";
 
     if (url.pathname === "/robots.txt") {
       return new Response("User-agent: *\nAllow: /\n\nSitemap: https://ga-pick.com/sitemap.xml\n", {
@@ -80,8 +80,6 @@ export default {
     const standaloneRoutes = new Map([
       ["/brand", "/brand/index.html"],
       ["/brand/index.html", "/brand/index.html"],
-      ["/brand/manage", "/brand/manage/index.html"],
-      ["/brand/manage/index.html", "/brand/manage/index.html"],
     ]);
     if (standaloneRoutes.has(normalizedPath)) {
       const assetUrl = new URL(request.url);
@@ -129,4 +127,3 @@ export default {
     ctx.waitUntil(onScheduled({ event, env, ctx }));
   },
 };
-
