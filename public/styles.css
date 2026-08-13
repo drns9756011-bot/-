@@ -7790,7 +7790,8 @@ html.is-mobile-device .header-ad-picture img {
 .anonymous-consultation-panel { width: min(720px, calc(100vw - 32px)); padding: 0; overflow: hidden; border: 1px solid #d7e1ec; box-shadow: 0 24px 70px rgba(14, 39, 66, .2); }
 .anonymous-consultation-modal { position: fixed; inset: 0; z-index: 100001; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(8, 24, 42, .58); isolation: isolate; }
 .anonymous-consultation-modal[hidden] { display: none !important; }
-.anonymous-consultation-panel { max-height: min(760px, calc(100vh - 48px)); overflow-y: auto; }
+.anonymous-consultation-panel { position: relative; z-index: 1; max-height: min(760px, calc(100vh - 48px)); overflow-y: auto; background: #fff !important; opacity: 1 !important; isolation: isolate; }
+.anonymous-consultation-panel::before { content: none !important; }
 .anonymous-consultation-panel > .eyebrow, .anonymous-consultation-panel > h2 { display: none; }
 .anonymous-consultation-panel > .modal-close { display: none; }
 .anonymous-chat-header { display: grid; grid-template-columns: 46px minmax(0, 1fr) 36px; gap: 12px; align-items: center; padding: 20px 22px; background: #123f6b; color: #fff; }
@@ -7801,10 +7802,17 @@ html.is-mobile-device .header-ad-picture img {
 .anonymous-chat-header p { margin: 4px 0 0; color: #d9e7f4; font-size: 13px; }
 .anonymous-chat-header .modal-close { position: static; width: 36px; height: 36px; color: #fff; border-color: rgba(255,255,255,.55); background: transparent; }
 .anonymous-chat-policy { display: flex; align-items: center; gap: 10px; padding: 11px 22px; background: #f0f5fa; border-bottom: 1px solid #dce6ef; color: #526579; font-size: 12px; }
+.anonymous-consultation-panel > .anonymous-chat-header,
+.anonymous-consultation-panel > .anonymous-chat-policy,
+.anonymous-consultation-panel > .anonymous-consultation-notice,
+.anonymous-consultation-panel > .anonymous-message-list,
+.anonymous-consultation-panel > .anonymous-message-form { position: relative; z-index: 2; opacity: 1 !important; }
 .anonymous-chat-policy strong { color: #123f6b; white-space: nowrap; }
+.anonymous-chat-policy, .anonymous-chat-policy * { opacity: 1 !important; background-color: #f0f5fa; }
 .anonymous-consultation-notice { color: #526579; line-height: 1.6; }
 .anonymous-consultation-panel > .anonymous-consultation-notice { margin: 16px 22px 0; font-size: 13px; }
-.anonymous-message-list { position: relative; z-index: 1; display: grid; gap: 10px; max-height: 360px; overflow: auto; padding: 14px; background: #f4f7fb; border: 1px solid #d8e1eb; opacity: 1; }
+.anonymous-consultation-panel > .anonymous-consultation-notice { background: #fff !important; color: #526579 !important; }
+.anonymous-message-list { position: relative; z-index: 1; display: grid; gap: 10px; max-height: 360px; overflow: auto; padding: 14px; background: #f4f7fb !important; border: 1px solid #d8e1eb; opacity: 1 !important; }
 .anonymous-message { max-width: 78%; padding: 11px 14px; background: #fff; border: 1px solid #d8e1eb; border-radius: 4px 14px 14px 14px; box-shadow: 0 2px 6px rgba(17, 44, 72, .04); }
 .anonymous-message.is-mine { justify-self: end; background: #e9f0f8; border-color: #b8cbe0; }
 .anonymous-message span { display: block; color: #526579; font-size: 12px; font-weight: 700; margin-bottom: 4px; }

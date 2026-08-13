@@ -775,7 +775,7 @@ async function openAnonymousConsultation(request, bid, role = "customer") {
     </div>`;
     document.body.appendChild(modal);
     modal.querySelector('.anonymous-consultation-panel').insertAdjacentHTML('afterbegin', `<div class="anonymous-chat-header"><div class="anonymous-chat-avatar" aria-hidden="true"><img src="/assets/pickquote-official-symbol-navy.png" alt="" /></div><div><span class="anonymous-chat-kicker">안전한 견적 상담</span><strong>선택 전 익명상담</strong><p data-anonymous-context>견적 조건을 익명으로 확인하는 중</p></div><button class="modal-close" type="button" data-anonymous-close aria-label="닫기">×</button></div><div class="anonymous-chat-policy"><strong>개인정보 보호 안내</strong><span>전화번호, 링크, 메신저, 매장 정보는 공유할 수 없습니다.</span></div>`);
-    modal.addEventListener("click", (event) => { if (event.target === modal || event.target.closest("[data-anonymous-close]")) closeAnonymousConsultation(); });
+    modal.addEventListener("click", (event) => { if (event.target.closest("[data-anonymous-close]")) closeAnonymousConsultation(); });
     modal.querySelector("[data-anonymous-form] textarea").addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
