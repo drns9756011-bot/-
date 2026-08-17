@@ -49,7 +49,7 @@ export default {
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://ga-pick.com/products</loc>
+    <loc>https://ga-pick.com/shopping</loc>
     <lastmod>2026-08-17</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
@@ -94,8 +94,10 @@ export default {
       ["/brand/index.html", "/brand/index.html"],
       ["/subscription", "/subscription/index.html"],
       ["/subscription/index.html", "/subscription/index.html"],
-      ["/products", "/products/index.html"],
-      ["/products/index.html", "/products/index.html"],
+      ["/shopping", "/shopping/index.html"],
+      ["/shopping/index.html", "/shopping/index.html"],
+      ["/products", "/shopping/index.html"],
+      ["/products/index.html", "/shopping/index.html"],
     ]);
     if (standaloneRoutes.has(normalizedPath)) {
       const assetUrl = new URL(request.url);

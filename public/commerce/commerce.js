@@ -1,8 +1,8 @@
-const commercePage = document.body.dataset.commercePage || "products";
+const commercePage = document.body.dataset.commercePage || "shopping";
 
 const categories = {
   subscription: ["TV", "냉장고", "세탁기·건조기", "정수기", "공기청정기", "주방가전"],
-  products: ["TV", "냉장고", "세탁기·건조기", "김치냉장고", "청소기", "주방가전"],
+  shopping: ["TV", "냉장고", "세탁기·건조기", "김치냉장고", "청소기", "주방가전"],
 };
 
 // 관리자 상품 연동 전에는 빈 배열을 유지합니다. 허위 상품이나 가격을 노출하지 않습니다.
@@ -16,7 +16,7 @@ let activeCategory = "전체";
 
 function renderCategories() {
   if (!categoryGrid) return;
-  const list = ["전체", ...(categories[commercePage] || categories.products)];
+  const list = ["전체", ...(categories[commercePage] || categories.shopping)];
   categoryGrid.innerHTML = list.map((category, index) => `
     <button class="commerce-category${index === 0 ? " is-active" : ""}" type="button" data-category="${category}">
       <b>${String(index + 1).padStart(2, "0")}</b>
@@ -42,7 +42,7 @@ function renderProducts() {
       <div class="commerce-empty">
         <div>
           <span class="commerce-empty-mark">P</span>
-          <h3>${isSubscription ? "구독 상품을 준비하고 있습니다." : "단품 구매 상품을 준비하고 있습니다."}</h3>
+          <h3>${isSubscription ? "구독 상품을 준비하고 있습니다." : "쇼핑 상품을 준비하고 있습니다."}</h3>
           <p>${isSubscription ? "월 구독료와 계약 조건을 정확히 확인한 상품부터 순차적으로 공개합니다." : "공식 상품 정보와 쿠팡 파트너스 링크가 확인된 제품부터 순차적으로 공개합니다."}</p>
           <a class="commerce-primary" href="${isSubscription ? "https://pf.kakao.com/_PxlUfX" : "/quote"}"${isSubscription ? " target=\"_blank\" rel=\"noopener noreferrer\"" : ""}>${isSubscription ? "구독 상담 문의" : "가전 견적 비교하기"}</a>
         </div>

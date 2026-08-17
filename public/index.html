@@ -196,8 +196,6 @@
       <nav class="nav" aria-label="주요 메뉴">
         <button type="button" data-view="customer">견적올리기</button>
         <a class="pick-top-link" href="/brand">브랜드관</a>
-        <a class="pick-top-link" href="/subscription">구독관</a>
-        <a class="pick-top-link" href="/products">단품관</a>
         <button type="button" data-view="lookup">내 견적 확인</button>
         <button type="button" data-view="sellerLogin">판매자</button>
       </nav>
@@ -319,7 +317,7 @@
                 <a href="/brand" aria-label="LG전자 브랜드관"><img src="/assets/brand-hero-lg-products.png" alt="LG전자 가전 제품" /><strong>LG전자 브랜드관</strong><span>인기 제품과 패키지 보기</span></a>
                 <a href="/brand" aria-label="삼성전자 브랜드관"><img src="/assets/brand-hero-samsung-products.png" alt="삼성전자 가전 제품" /><strong>삼성전자 브랜드관</strong><span>인기 제품과 패키지 보기</span></a>
                 <a href="/subscription" aria-label="가전 구독관"><img src="/assets/brand-hero-lg-products.png" alt="가전 구독 상품" /><strong>가전 구독관</strong><span>월 구독료와 계약 조건 비교</span></a>
-                <a href="/products" aria-label="가전 단품관"><img src="/assets/brand-hero-samsung-products.png" alt="단품 구매 가전 제품" /><strong>가전 단품관</strong><span>필요한 제품만 골라서 구매</span></a>
+                <a href="/shopping" aria-label="가전 쇼핑관"><img src="/assets/brand-hero-samsung-products.png" alt="쇼핑 가능한 가전 제품" /><strong>가전 쇼핑관</strong><span>필요한 제품만 골라서 구매</span></a>
               </div>
             </section>
 
@@ -881,7 +879,7 @@
         <a href="https://ga-pick.com/quote" data-view="customer">가전 견적 올리기</a>
         <a href="https://ga-pick.com/brand">브랜드관</a>
         <a href="https://ga-pick.com/subscription">가전 구독관</a>
-        <a href="https://ga-pick.com/products">가전 단품관</a>
+        <a href="https://ga-pick.com/shopping">가전 쇼핑관</a>
         <a href="https://ga-pick.com/my-quote" data-view="lookup">내 견적 확인</a>
         <a href="https://ga-pick.com/seller" data-view="sellerLogin">판매자 페이지</a>
         <a href="https://ga-pick.com/seller/register" data-view="sellerRegister">판매자 등록</a>
@@ -1170,19 +1168,39 @@
           const frameHost = document.getElementById("pickCoupangAdFrame");
           if (!slot || !frameHost || frameHost.dataset.mounted === "true") return;
 
-          const frame = document.createElement("iframe");
-          frame.title = "쿠팡 파트너스 상품 광고";
-          frame.width = "680";
-          frame.height = "140";
-          frame.loading = "lazy";
-          frame.scrolling = "no";
-          frame.referrerPolicy = "strict-origin-when-cross-origin";
-          frame.setAttribute("sandbox", "allow-scripts allow-popups allow-popups-to-escape-sandbox");
-          frame.srcdoc = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><base target="_blank"><style>html,body{margin:0;width:680px;height:140px;overflow:hidden;background:#fff}</style></head><body><script src="https://ads-partners.coupang.com/g.js"><\/script><script>new PartnersCoupang.G({"id":1018458,"template":"carousel","trackingCode":"AF9292643","width":"680","height":"140","tsource":""});<\/script></body></html>`;
+          function renderAd() {
+            if (!window.PartnersCoupang?.G) return;
+            frameHost.dataset.mounted = "true";
+            frameHost.replaceChildren();
+            new window.PartnersCoupang.G({
+              id: 1018458,
+              template: "carousel",
+              trackingCode: "AF9292643",
+              width: "680",
+              height: "140",
+              tsource: "",
+              container: frameHost,
+            });
+            slot.hidden = false;
+          }
 
-          frameHost.dataset.mounted = "true";
-          frameHost.appendChild(frame);
-          slot.hidden = false;
+          if (window.PartnersCoupang?.G) {
+            renderAd();
+            return;
+          }
+
+          let script = document.getElementById("coupangPartnersScript");
+          if (!script) {
+            script = document.createElement("script");
+            script.id = "coupangPartnersScript";
+            script.src = "https://ads-partners.coupang.com/g.js";
+            script.async = true;
+            script.addEventListener("load", renderAd, { once: true });
+            script.addEventListener("error", () => { slot.hidden = true; }, { once: true });
+            document.head.appendChild(script);
+          } else {
+            script.addEventListener("load", renderAd, { once: true });
+          }
         }
 
         if (document.readyState === "loading") {
