@@ -98,11 +98,17 @@ function renderProducts() {
   }
 
   productGrid.innerHTML = items.map((item) => {
-    const image = item.imageUrl || `/api/subscription-product-image?model=${encodeURIComponent(item.model || "")}`;
+    const image = item.imageUrl;
+    const atlasMatch = /^atlas:(.+)#(\d+),(\d+)$/.exec(image || "");
+    const imageMarkup = atlasMatch
+      ? `<span class="commerce-product-atlas" role="img" aria-label="${escapeHtml(item.model)} 제품 이미지" style="--atlas-url:url('${escapeHtml(atlasMatch[1])}');--atlas-x:${Number(atlasMatch[2])};--atlas-y:${Number(atlasMatch[3])}"></span>`
+      : image
+        ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(item.model)} 제품 이미지" loading="lazy" data-product-image />`
+        : `<span class="commerce-product-image-missing">이미지 준비 중</span>`;
     const care = [item.careType, item.careDetail, item.visitCycle ? `${item.visitCycle} 주기` : ""].filter(Boolean).join(" · ");
     return `
       <article class="commerce-product-card">
-        <div class="commerce-product-image"><img src="${escapeHtml(image)}" alt="${escapeHtml(item.model)} 제품 이미지" loading="lazy" data-product-image /></div>
+        <div class="commerce-product-image">${imageMarkup}</div>
         <div class="commerce-product-body">
           <span class="commerce-product-meta">${escapeHtml(item.brand)} · ${escapeHtml(item.category)}</span>
           <h3>${escapeHtml(item.sourceCategory || item.name)}</h3>
@@ -117,7 +123,7 @@ function renderProducts() {
 
   productGrid.querySelectorAll("[data-product-image]").forEach((image) => {
     image.addEventListener("error", () => {
-      if (!image.src.endsWith("/assets/brand-hero-lg-products.png")) image.src = "/assets/brand-hero-lg-products.png";
+      image.parentElement.innerHTML = '<span class="commerce-product-image-missing">이미지 준비 중</span>';
     }, { once: true });
   });
   updateCatalogMeta(items.length, allItems.length);

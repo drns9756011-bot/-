@@ -4813,29 +4813,14 @@ async function replaceSubscriptionProducts(env, request) {
 async function getSubscriptionProductImage(env, request) {
   await ensureSubscriptionProductSchema(env);
   const model = String(new URL(request.url).searchParams.get("model") || "").trim().toUpperCase();
-  if (!model) return new Response(null, { status: 302, headers: { Location: "/assets/brand-hero-lg-products.png" } });
+  if (!model) return json({ ok: false, message: "모델 코드가 필요합니다." }, 400);
   const row = await env.DB.prepare(
-    `SELECT p.id, p.image_url FROM subscription_products p
+    `SELECT p.image_url FROM subscription_products p
       JOIN subscription_product_sets s ON s.id = p.set_id
      WHERE s.status = 'active' AND p.model = ? LIMIT 1`
   ).bind(model).first();
   if (row?.image_url) return new Response(null, { status: 302, headers: { Location: row.image_url, "Cache-Control": "public, max-age=86400" } });
-
-  const config = getNaverShoppingConfig(env);
-  if (row && config.clientId && config.clientSecret) {
-    try {
-      const modelBody = String(model.split(".")[0] || model).trim();
-      const results = await requestNaverShoppingItems(config, modelBody, 10);
-      const matched = results.find((item) => item.image && isExactSameModel(item, modelBody));
-      if (matched?.image) {
-        await env.DB.prepare("UPDATE subscription_products SET image_url = ? WHERE id = ?").bind(matched.image, row.id).run();
-        return new Response(null, { status: 302, headers: { Location: matched.image, "Cache-Control": "public, max-age=86400" } });
-      }
-    } catch (error) {
-      console.warn("구독 상품 이미지 조회 실패", model, error);
-    }
-  }
-  return new Response(null, { status: 302, headers: { Location: "/assets/brand-hero-lg-products.png", "Cache-Control": "public, max-age=3600" } });
+  return json({ ok: false, message: "등록된 제품 이미지가 없습니다." }, 404);
 }
 
 export async function onRequest(context) {
