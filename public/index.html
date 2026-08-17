@@ -161,7 +161,7 @@
         display: block;
       }
     </style>
-    <link rel="stylesheet" href="/styles.css?v=20260817-hero-oneline" />
+    <link rel="stylesheet" href="/styles.css?v=20260817-coupang-pc" />
     <script defer src="/privacy-policy.js?v=20260811-privacy-policy-v19"></script>
     <script defer src="/app.js?v=20260812-mobile-samsung-hero"></script>
     <script defer src="/customer-wizard.js?v=20260810-mobile-next-scroll-guard-v17"></script>
@@ -237,9 +237,9 @@
               <div><span>03</span><strong>가격과 혜택을 함께 확인</strong><small>배송·설치 조건까지 비교해요</small></div>
             </nav>
 
-            <section class="pick-home-ad-slot" aria-label="광고 영역">
-              <span>광고</span>
-              <strong>픽견적 서비스 안내 광고 영역</strong>
+            <section class="pick-home-ad-slot pick-coupang-ad-slot" id="pickCoupangAdSlot" aria-label="쿠팡 파트너스 광고" hidden>
+              <span class="pick-coupang-ad-label">광고</span>
+              <div class="pick-coupang-ad-frame" id="pickCoupangAdFrame"></div>
             </section>
 
             <section class="pick-privacy-home" aria-labelledby="pickPrivacyTitle">
@@ -1158,6 +1158,39 @@
         lockInitialRoute();
         document.addEventListener("DOMContentLoaded", lockInitialRoute);
         window.addEventListener("load", lockInitialRoute);
+      })();
+    </script>
+    <script>
+      (() => {
+        const desktopQuery = window.matchMedia("(min-width: 901px)");
+
+        function mountCoupangPartnersAd() {
+          if (!desktopQuery.matches) return;
+          const slot = document.getElementById("pickCoupangAdSlot");
+          const frameHost = document.getElementById("pickCoupangAdFrame");
+          if (!slot || !frameHost || frameHost.dataset.mounted === "true") return;
+
+          const frame = document.createElement("iframe");
+          frame.title = "쿠팡 파트너스 상품 광고";
+          frame.width = "680";
+          frame.height = "140";
+          frame.loading = "lazy";
+          frame.scrolling = "no";
+          frame.referrerPolicy = "strict-origin-when-cross-origin";
+          frame.setAttribute("sandbox", "allow-scripts allow-popups allow-popups-to-escape-sandbox");
+          frame.srcdoc = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><base target="_blank"><style>html,body{margin:0;width:680px;height:140px;overflow:hidden;background:#fff}</style></head><body><script src="https://ads-partners.coupang.com/g.js"><\/script><script>new PartnersCoupang.G({"id":1018458,"template":"carousel","trackingCode":"AF9292643","width":"680","height":"140","tsource":""});<\/script></body></html>`;
+
+          frameHost.dataset.mounted = "true";
+          frameHost.appendChild(frame);
+          slot.hidden = false;
+        }
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", mountCoupangPartnersAd, { once: true });
+        } else {
+          mountCoupangPartnersAd();
+        }
+        desktopQuery.addEventListener?.("change", mountCoupangPartnersAd);
       })();
     </script>
     <div class="security-blanket" id="securityBlanket" aria-hidden="true"></div>
