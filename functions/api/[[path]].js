@@ -20,7 +20,7 @@ const SOLAPI_DEFAULTS = {
   SOLAPI_TEMPLATE_SELLER_QUOTE_REGISTERED: "KA01TP260805074550965Bb2zfMAs16w",
 };
 
-const PUBLIC_API_VERSION = "20260811-seller-channel-brand-bid-v18";
+const PUBLIC_API_VERSION = "20260817-subscription-catalog-v1";
 const QUOTE_DURATION_HOURS = 72;
 const QUOTE_DURATION_POLICY_KEY = "quote-duration-hours";
 const NAVER_SHOPPING_CLIENT_ID_DEFAULT = "x1CsXB5ZCYULxcGnclGq";
@@ -4636,6 +4636,208 @@ async function reviewAnonymousPolicyCase(env, request, caseId) {
   return json({ ok: true, decision, action });
 }
 
+let subscriptionProductSchemaReady = false;
+
+async function ensureSubscriptionProductSchema(env) {
+  if (subscriptionProductSchemaReady) return;
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS subscription_product_sets (
+      id TEXT PRIMARY KEY,
+      status TEXT NOT NULL DEFAULT 'staging',
+      source_name TEXT NOT NULL DEFAULT '',
+      source_date TEXT NOT NULL DEFAULT '',
+      product_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      activated_at TEXT DEFAULT ''
+    )`
+  ).run();
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS subscription_products (
+      id TEXT PRIMARY KEY,
+      set_id TEXT NOT NULL,
+      brand TEXT NOT NULL,
+      category TEXT NOT NULL,
+      source_category TEXT NOT NULL DEFAULT '',
+      model TEXT NOT NULL,
+      name TEXT NOT NULL,
+      monthly_fee_72 INTEGER NOT NULL,
+      care_type TEXT DEFAULT '',
+      care_detail TEXT DEFAULT '',
+      visit_cycle TEXT DEFAULT '',
+      image_url TEXT DEFAULT '',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    )`
+  ).run();
+  const indexes = [
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_subscription_products_set_model ON subscription_products(set_id, model)",
+    "CREATE INDEX IF NOT EXISTS idx_subscription_products_set_category ON subscription_products(set_id, category, sort_order)",
+    "CREATE INDEX IF NOT EXISTS idx_subscription_product_sets_status ON subscription_product_sets(status, activated_at DESC)",
+  ];
+  for (const sql of indexes) await env.DB.prepare(sql).run();
+  subscriptionProductSchemaReady = true;
+}
+
+function normalizeSubscriptionProduct(row) {
+  return {
+    id: row.id,
+    brand: row.brand,
+    category: row.category,
+    sourceCategory: row.source_category || row.category,
+    model: row.model,
+    name: row.name,
+    monthlyFee72: Number(row.monthly_fee_72 || 0),
+    careType: row.care_type || "",
+    careDetail: row.care_detail || "",
+    visitCycle: row.visit_cycle || "",
+    imageUrl: row.image_url || "",
+  };
+}
+
+async function getSubscriptionProducts(env) {
+  await ensureSubscriptionProductSchema(env);
+  const activeSet = await env.DB.prepare(
+    "SELECT * FROM subscription_product_sets WHERE status = 'active' ORDER BY activated_at DESC LIMIT 1"
+  ).first();
+  if (!activeSet) return json({ ok: true, source: null, count: 0, items: [] });
+
+  const rows = [];
+  for (let offset = 0; offset < 5000; offset += 500) {
+    const result = await env.DB.prepare(
+      `SELECT * FROM subscription_products
+        WHERE set_id = ?
+        ORDER BY category ASC, source_category ASC, sort_order ASC, model ASC
+        LIMIT 500 OFFSET ?`
+    ).bind(activeSet.id, offset).all();
+    const page = result.results || [];
+    rows.push(...page);
+    if (page.length < 500) break;
+  }
+  const items = rows.map(normalizeSubscriptionProduct);
+  return json({
+    ok: true,
+    source: {
+      name: activeSet.source_name,
+      date: activeSet.source_date,
+      activatedAt: activeSet.activated_at,
+      contractMonths: 72,
+      pricePolicy: "72개월·결합없음·기본요금",
+    },
+    count: items.length,
+    items,
+  });
+}
+
+function cleanSubscriptionInput(item, index) {
+  const model = String(item?.model || "").trim().toUpperCase().slice(0, 120);
+  const monthlyFee72 = Math.round(Number(item?.monthlyFee72 || 0));
+  if (!model || monthlyFee72 <= 0) throw new Error(`${index + 1}번째 상품의 모델명 또는 72개월 요금이 올바르지 않습니다.`);
+  return {
+    brand: String(item?.brand || "LG전자").trim().slice(0, 40),
+    category: String(item?.category || "생활가전").trim().slice(0, 40),
+    sourceCategory: String(item?.sourceCategory || item?.category || "생활가전").trim().slice(0, 80),
+    model,
+    name: String(item?.name || `LG ${item?.sourceCategory || item?.category || "가전"}`).trim().slice(0, 160),
+    monthlyFee72,
+    careType: String(item?.careType || "").trim().slice(0, 80),
+    careDetail: String(item?.careDetail || "").trim().slice(0, 120),
+    visitCycle: String(item?.visitCycle || "").trim().slice(0, 60),
+    imageUrl: String(item?.imageUrl || "").trim().slice(0, 1000),
+  };
+}
+
+async function replaceSubscriptionProducts(env, request) {
+  const denied = requireAdmin(request, env);
+  if (denied) return denied;
+  await ensureSubscriptionProductSchema(env);
+  const body = await request.json().catch(() => ({}));
+  const rawItems = Array.isArray(body.items) ? body.items : [];
+  if (!rawItems.length || rawItems.length > 3000) {
+    return json({ ok: false, message: "교체할 구독 상품은 1~3,000개여야 합니다." }, 400);
+  }
+
+  const deduped = new Map();
+  rawItems.forEach((item, index) => {
+    const normalized = cleanSubscriptionInput(item, index);
+    const previous = deduped.get(normalized.model);
+    if (!previous || normalized.monthlyFee72 < previous.monthlyFee72) deduped.set(normalized.model, normalized);
+  });
+  const items = [...deduped.values()];
+  const now = new Date().toISOString();
+  const setId = createId("subscription-set");
+  await env.DB.prepare(
+    `INSERT INTO subscription_product_sets
+      (id, status, source_name, source_date, product_count, created_at, activated_at)
+     VALUES (?, 'staging', ?, ?, ?, ?, '')`
+  ).bind(
+    setId,
+    String(body.sourceName || "구독 상품 목록").trim().slice(0, 240),
+    String(body.sourceDate || "").trim().slice(0, 20),
+    items.length,
+    now
+  ).run();
+
+  try {
+    for (let offset = 0; offset < items.length; offset += 75) {
+      const statements = items.slice(offset, offset + 75).map((item, localIndex) => env.DB.prepare(
+        `INSERT INTO subscription_products
+          (id, set_id, brand, category, source_category, model, name, monthly_fee_72,
+           care_type, care_detail, visit_cycle, image_url, sort_order, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        createId("subscription-product"), setId, item.brand, item.category, item.sourceCategory,
+        item.model, item.name, item.monthlyFee72, item.careType, item.careDetail, item.visitCycle,
+        item.imageUrl, offset + localIndex, now
+      ));
+      await env.DB.batch(statements);
+    }
+
+    await env.DB.batch([
+      env.DB.prepare("UPDATE subscription_product_sets SET status = 'archived' WHERE status = 'active'"),
+      env.DB.prepare("UPDATE subscription_product_sets SET status = 'active', activated_at = ? WHERE id = ?").bind(now, setId),
+    ]);
+  } catch (error) {
+    await env.DB.prepare("DELETE FROM subscription_products WHERE set_id = ?").bind(setId).run().catch(() => {});
+    await env.DB.prepare("DELETE FROM subscription_product_sets WHERE id = ?").bind(setId).run().catch(() => {});
+    throw error;
+  }
+
+  const archived = await env.DB.prepare("SELECT id FROM subscription_product_sets WHERE status = 'archived'").all();
+  for (const row of archived.results || []) {
+    await env.DB.prepare("DELETE FROM subscription_products WHERE set_id = ?").bind(row.id).run();
+    await env.DB.prepare("DELETE FROM subscription_product_sets WHERE id = ?").bind(row.id).run();
+  }
+  return json({ ok: true, setId, count: items.length, activatedAt: now });
+}
+
+async function getSubscriptionProductImage(env, request) {
+  await ensureSubscriptionProductSchema(env);
+  const model = String(new URL(request.url).searchParams.get("model") || "").trim().toUpperCase();
+  if (!model) return new Response(null, { status: 302, headers: { Location: "/assets/brand-hero-lg-products.png" } });
+  const row = await env.DB.prepare(
+    `SELECT p.id, p.image_url FROM subscription_products p
+      JOIN subscription_product_sets s ON s.id = p.set_id
+     WHERE s.status = 'active' AND p.model = ? LIMIT 1`
+  ).bind(model).first();
+  if (row?.image_url) return new Response(null, { status: 302, headers: { Location: row.image_url, "Cache-Control": "public, max-age=86400" } });
+
+  const config = getNaverShoppingConfig(env);
+  if (row && config.clientId && config.clientSecret) {
+    try {
+      const modelBody = String(model.split(".")[0] || model).trim();
+      const results = await requestNaverShoppingItems(config, modelBody, 10);
+      const matched = results.find((item) => item.image && isExactSameModel(item, modelBody));
+      if (matched?.image) {
+        await env.DB.prepare("UPDATE subscription_products SET image_url = ? WHERE id = ?").bind(matched.image, row.id).run();
+        return new Response(null, { status: 302, headers: { Location: matched.image, "Cache-Control": "public, max-age=86400" } });
+      }
+    } catch (error) {
+      console.warn("구독 상품 이미지 조회 실패", model, error);
+    }
+  }
+  return new Response(null, { status: 302, headers: { Location: "/assets/brand-hero-lg-products.png", "Cache-Control": "public, max-age=3600" } });
+}
+
 export async function onRequest(context) {
   const { request, env, params } = context;
   const pathParts = Array.isArray(params.path) ? params.path : [];
@@ -4685,6 +4887,9 @@ export async function onRequest(context) {
   if (path === "seller-password-reset" && method === "POST") return resetSellerPassword(env, request);
   if (path === "brand-packages" && method === "GET") return apiBoundary(() => getPublicBrandPackages(env, request), "브랜드관 패키지를 불러오지 못했습니다.");
   if (path === "brand-consultations" && method === "POST") return apiBoundary(() => createBrandConsultation(env, request), "브랜드관 상담 요청 처리 중 오류가 발생했습니다.");
+  if (path === "subscription-products" && method === "GET") return apiBoundary(() => getSubscriptionProducts(env), "구독 상품을 불러오지 못했습니다.");
+  if (path === "subscription-product-image" && method === "GET") return getSubscriptionProductImage(env, request);
+  if (path === "subscription-products/replace" && method === "POST") return apiBoundary(() => replaceSubscriptionProducts(env, request), "구독 상품 목록을 교체하지 못했습니다.");
 
   if (path === "seller-applications" && method === "GET") {
     const denied = requireAdmin(request, env);
