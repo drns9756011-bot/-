@@ -2,7 +2,7 @@
 
 ## 반영 기준
 
-- 원본: `전자랜드 8월14일 기준 구독료 최신화.xlsx`
+- 원본: 관리자에게 별도로 전달되는 비공개 구독료 자료
 - 사용 시트: `전자랜드`
 - 노출 조건: 계약기간 `72개월`, 결합유형 `결합없음`
 - 노출 가격: `기본요금`만 사용
@@ -27,6 +27,9 @@
 - 상품 이미지: `GET /api/subscription-product-image?model=모델명`
 - 전체 교체: `POST /api/subscription-products/replace`
 - 전체 교체 API는 `X-Admin-Token` 인증이 필요합니다.
+- 원본 엑셀과 변환 중간 JSON은 `public` 및 배포 압축에 포함하지 않습니다.
+- 브라우저는 공개 정적 JSON을 읽지 않고 D1 기반 API에서만 상품을 조회합니다.
+- D1에는 원본 엑셀이나 개인정보를 저장하지 않고 공개에 필요한 모델, 품목, 72개월 요금, 관리 조건, 이미지 좌표만 저장합니다.
 - 새 세트 저장이 모두 끝난 뒤 활성 세트를 전환합니다. 저장 실패 시 기존 활성 목록은 유지됩니다.
 - 활성 전환이 끝나면 이전 상품 세트와 상품 행은 서버에서 영구 삭제합니다.
 - 엘플랜 배포자료와 LG전자 공식 URL의 사진을 배포 시 서버 자산으로 저장합니다.
@@ -37,7 +40,7 @@
 ```powershell
 pwsh -File tools/extract_subscription_catalog.ps1 `
   -InputPath "새 구독료 파일.xlsx" `
-  -OutputPath "public/assets/subscription-products-current.json"
+  -OutputPath "private-data/subscription-products-current.json"
 
 pwsh -File tools/extract_lplan_image_source.ps1 `
   -ZipPath "새 엘플랜 배포자료.zip"
@@ -45,7 +48,7 @@ pwsh -File tools/extract_lplan_image_source.ps1 `
 node tools/match_lplan_product_images.mjs
 
 node tools/build_subscription_seed.mjs `
-  public/assets/subscription-products-20260814.json `
+  private-data/subscription-products-20260814.json `
   subscription-products-seed-20260814.sql
 
 pwsh -File tools/publish_subscription_catalog.ps1 `

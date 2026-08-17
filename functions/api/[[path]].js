@@ -4717,7 +4717,7 @@ async function getSubscriptionProducts(env) {
   return json({
     ok: true,
     source: {
-      name: activeSet.source_name,
+      name: "구독 상품 데이터",
       date: activeSet.source_date,
       activatedAt: activeSet.activated_at,
       contractMonths: 72,
@@ -4771,7 +4771,7 @@ async function replaceSubscriptionProducts(env, request) {
      VALUES (?, 'staging', ?, ?, ?, ?, '')`
   ).bind(
     setId,
-    String(body.sourceName || "구독 상품 목록").trim().slice(0, 240),
+    "구독 상품 데이터",
     String(body.sourceDate || "").trim().slice(0, 20),
     items.length,
     now

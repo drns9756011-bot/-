@@ -162,15 +162,6 @@ async function loadSubscriptionProducts() {
   sortCommerceItems();
 }
 
-async function loadStaticSubscriptionFallback() {
-  const response = await fetch("/assets/subscription-products-20260814.json", { cache: "no-store" });
-  if (!response.ok) throw new Error("subscription fallback unavailable");
-  const payload = await response.json();
-  commerceItems = Array.isArray(payload.items) ? payload.items : [];
-  sourceInfo = { name: payload.sourceName, date: payload.sourceDate };
-  sortCommerceItems();
-}
-
 categoryGrid?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-category]");
   if (!button) return;
@@ -189,7 +180,8 @@ async function initCommerce() {
     try {
       await loadSubscriptionProducts();
     } catch (error) {
-      try { await loadStaticSubscriptionFallback(); } catch (fallbackError) { commerceItems = []; }
+      commerceItems = [];
+      sourceInfo = null;
     }
   }
   renderCategories();

@@ -83,7 +83,7 @@ a { color: inherit; }
 .commerce-product-card { min-width: 0; overflow: hidden; background: #fff; border: 1px solid var(--commerce-line); border-radius: 8px; }
 .commerce-product-image { aspect-ratio: 4 / 3; display: grid; place-items: center; background: #f0f4f8; overflow: hidden; }
 .commerce-product-image img { width: 100%; height: 100%; object-fit: contain; }
-.commerce-product-atlas { width: 100%; height: 100%; display: block; background-color: #fff; background-image: var(--atlas-url); background-repeat: no-repeat; background-size: 1000% 1000%; background-position: calc(var(--atlas-x) * 100% / 9) calc(var(--atlas-y) * 100% / 9); }
+.commerce-product-atlas { width: auto; height: 100%; aspect-ratio: 1 / 1; display: block; background-color: #fff; background-image: var(--atlas-url); background-repeat: no-repeat; background-size: 1000% 1000%; background-position: calc(var(--atlas-x) * 100% / 9) calc(var(--atlas-y) * 100% / 9); }
 .commerce-product-image-missing { color: #738396; font-size: 13px; font-weight: 750; }
 .commerce-product-body { padding: 18px; }
 .commerce-product-meta { color: var(--commerce-navy); font-size: 12px; font-weight: 850; }

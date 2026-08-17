@@ -4,30 +4,44 @@ import hashlib
 import urllib.request
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageChops, ImageOps
 
 
 ROOT = Path(__file__).resolve().parent.parent
-CATALOG_PATH = ROOT / "public" / "assets" / "subscription-products-20260814.json"
+CATALOG_PATH = ROOT / "private-data" / "subscription-products-20260814.json"
 SOURCE_DIR = ROOT / "public" / "assets" / "subscription-product-images"
 OUTPUT_DIR = ROOT / "public" / "assets" / "subscription-product-atlases"
 REMOTE_CACHE_DIR = ROOT / ".tmp" / "subscription-official-images"
 GRID_SIZE = 10
 TILE_SIZE = 320
-INNER_SIZE = 288
+INNER_SIZE = 300
 
 
 def create_tile(source_path: Path) -> Image.Image:
     with Image.open(source_path) as source:
         image = ImageOps.exif_transpose(source).convert("RGBA")
+        flattened = Image.new("RGBA", image.size, "white")
+        flattened.alpha_composite(image)
+        image = flattened.convert("RGB")
+
+        difference = ImageChops.difference(image, Image.new("RGB", image.size, "white")).convert("L")
+        content_mask = difference.point(lambda value: 255 if value > 10 else 0)
+        bounds = content_mask.getbbox()
+        if bounds:
+            left, top, right, bottom = bounds
+            padding = max(8, round(max(right - left, bottom - top) * 0.035))
+            image = image.crop((
+                max(0, left - padding),
+                max(0, top - padding),
+                min(image.width, right + padding),
+                min(image.height, bottom + padding),
+            ))
+
         image.thumbnail((INNER_SIZE, INNER_SIZE), Image.Resampling.LANCZOS)
         tile = Image.new("RGB", (TILE_SIZE, TILE_SIZE), "white")
         left = (TILE_SIZE - image.width) // 2
         top = (TILE_SIZE - image.height) // 2
-        if image.mode == "RGBA":
-            tile.paste(image, (left, top), image)
-        else:
-            tile.paste(image, (left, top))
+        tile.paste(image, (left, top))
         return tile
 
 
