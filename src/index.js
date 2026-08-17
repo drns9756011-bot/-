@@ -38,7 +38,19 @@ export default {
   </url>
   <url>
     <loc>https://ga-pick.com/brand</loc>
-    <lastmod>2026-08-07</lastmod>
+    <lastmod>2026-08-17</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://ga-pick.com/subscription</loc>
+    <lastmod>2026-08-17</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://ga-pick.com/products</loc>
+    <lastmod>2026-08-17</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
@@ -80,6 +92,10 @@ export default {
     const standaloneRoutes = new Map([
       ["/brand", "/brand/index.html"],
       ["/brand/index.html", "/brand/index.html"],
+      ["/subscription", "/subscription/index.html"],
+      ["/subscription/index.html", "/subscription/index.html"],
+      ["/products", "/products/index.html"],
+      ["/products/index.html", "/products/index.html"],
     ]);
     if (standaloneRoutes.has(normalizedPath)) {
       const assetUrl = new URL(request.url);

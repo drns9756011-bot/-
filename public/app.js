@@ -109,8 +109,13 @@ const confirmBidSelectBtn = document.querySelector("#confirmBidSelectBtn");
 const sellerRegisterCompleteModal = document.querySelector("#sellerRegisterCompleteModal");
 const closeSellerRegisterCompleteModal = document.querySelector("#closeSellerRegisterCompleteModal");
 const quoteImageModal = document.querySelector("#quoteImageModal");
-const quoteImageModalImg = document.querySelector("#quoteImageModalImg");
+const quoteImageModalImg = document.querySelector(".image-modal-viewport #quoteImageModalImg");
 const closeQuoteImageModal = document.querySelector("#closeQuoteImageModal");
+const quoteImageViewport = document.querySelector("#quoteImageViewport");
+const quoteImageZoomOut = document.querySelector("#quoteImageZoomOut");
+const quoteImageZoomReset = document.querySelector("#quoteImageZoomReset");
+const quoteImageZoomIn = document.querySelector("#quoteImageZoomIn");
+const quoteImageFit = document.querySelector("#quoteImageFit");
 const openSellerAccountModal = document.querySelector("#openSellerAccountModal");
 const sellerAccountModal = document.querySelector("#sellerAccountModal");
 const closeSellerAccountModal = document.querySelector("#closeSellerAccountModal");
@@ -820,8 +825,23 @@ async function refreshAnonymousConsultation(modal) {
   const list = modal.querySelector("[data-anonymous-messages]");
   if (!result?.ok) { list.innerHTML = `<p class="empty-state">상담 내용을 불러오지 못했습니다.</p>`; return; }
   const rows = result.rows || [];
+  const hasCustomerMessage = rows.some((row) => row.sender_role === 'customer' && Number(row.blocked || 0) === 0);
+  const composer = modal.querySelector('[data-anonymous-form] textarea');
+  const sendButton = modal.querySelector('[data-anonymous-form] button[type="submit"]');
+  const composerNotice = modal.querySelector('[data-anonymous-message]');
+  const sellerMustWait = activeAnonymousConsultation.role === 'seller' && !hasCustomerMessage;
+  if (composer) {
+    composer.disabled = sellerMustWait;
+    composer.placeholder = sellerMustWait ? '고객이 먼저 메시지를 보내면 답변할 수 있습니다.' : '설치, 배송, 혜택 등 조건을 물어보세요.';
+  }
+  if (sendButton) sendButton.disabled = sellerMustWait;
+  if (sellerMustWait && composerNotice) {
+    composerNotice.textContent = '고객이 먼저 메시지를 보내야 답변할 수 있습니다.';
+    composerNotice.dataset.type = 'normal';
+  }
   list.innerHTML = rows.length ? rows.map((row) => `<div class="anonymous-message ${row.sender_role === activeAnonymousConsultation.role ? "is-mine" : ""}"><span>${row.sender_role === "seller" ? "판매자" : "고객"}</span><p>${escapeHTML(row.body)}</p></div>`).join("") : `<p class="empty-state">아직 메시지가 없습니다.</p>`;
-  const incomingCount = rows.filter((row) => row.sender_role !== activeAnonymousConsultation.role).length;
+  const roleReadAt = activeAnonymousConsultation.role === 'seller' ? result.consultation.sellerReadAt : result.consultation.customerReadAt;
+  const incomingCount = rows.filter((row) => row.sender_role !== activeAnonymousConsultation.role && (!roleReadAt || String(row.created_at || '') > String(roleReadAt))).length;
   document.querySelectorAll("[data-anonymous-chat-badge]").forEach((badge) => {
     if (String(badge.dataset.requestId || "") !== String(activeAnonymousConsultation.quoteId || "")) return;
     badge.textContent = incomingCount > 99 ? "99+" : String(incomingCount);
@@ -837,8 +857,30 @@ async function refreshAnonymousConsultation(modal) {
     state.textContent = read ? '읽음' : '전송됨';
     message.appendChild(state);
   });
-  await apiJson(`/api/anonymous-consultations/${encodeURIComponent(activeAnonymousConsultation.id)}/read`, { method: 'POST', showLoading: false, silent: true, body: JSON.stringify({ role: activeAnonymousConsultation.role }) });
+  const readResult = await apiJson(`/api/anonymous-consultations/${encodeURIComponent(activeAnonymousConsultation.id)}/read`, { method: 'POST', showLoading: false, silent: true, body: JSON.stringify({ role: activeAnonymousConsultation.role }) });
+  if (readResult?.ok) {
+    document.querySelectorAll("[data-anonymous-chat-badge]").forEach((badge) => {
+      if (String(badge.dataset.requestId || "") !== String(activeAnonymousConsultation.quoteId || "")) return;
+      badge.textContent = "0";
+      badge.hidden = true;
+    });
+    if (activeAnonymousConsultation.role === 'seller') clearSellerChatRoomBadge(activeAnonymousConsultation.id);
+  }
   list.scrollTop = list.scrollHeight;
+}
+
+function clearSellerChatRoomBadge(roomId) {
+  const room = sellerChatRooms.find((item) => String(item.id) === String(roomId));
+  if (room) room.customerMessageCount = 0;
+  const roomElement = document.querySelector(`[data-chat-room-id="${CSS.escape(String(roomId))}"]`);
+  const roomBadge = roomElement?.querySelector('.anonymous-chat-badge');
+  if (roomBadge) roomBadge.remove();
+  const count = sellerChatRooms.reduce((sum, item) => sum + Number(item.customerMessageCount || 0), 0);
+  const tabBadge = document.querySelector('#sellerChatTabBadge');
+  if (tabBadge) {
+    tabBadge.textContent = count > 99 ? '99+' : String(count);
+    tabBadge.hidden = count === 0;
+  }
 }
 
 async function findSellerAccountFromServer(payload) {
@@ -1115,6 +1157,22 @@ async function lookupCustomerQuotesFromServer(customer, phone, quoteNumber = "")
   }
 
   return { ok: true, rows: result.rows };
+}
+
+async function syncLookupBidsFromServer(quoteRows) {
+  const quoteIds = [...new Set((quoteRows || []).map((row) => String(row?.id || "").trim()).filter(Boolean))];
+  if (!quoteIds.length) {
+    replaceBids([]);
+    return;
+  }
+
+  const results = await Promise.all(
+    quoteIds.map((quoteId) => apiJson(`/api/bids?quoteId=${encodeURIComponent(quoteId)}`, { showLoading: false, silent: true }))
+  );
+  const rows = results
+    .filter((result) => result?.ok && Array.isArray(result.rows))
+    .flatMap((result) => result.rows);
+  replaceBids(rows);
 }
 
 async function saveCustomerQuoteToServer(quote) {
@@ -2306,7 +2364,11 @@ async function createCustomerRequest(formData) {
   renderRequests();
   renderSelectedRequest();
   resetCustomerForm();
-  setView("lookup");
+  if (quoteType === "without_quote") {
+    window.location.assign("/brand?from=quote");
+  } else {
+    setView("lookup");
+  }
   return { ok: true, row: savedRequest };
 }
 
@@ -2630,9 +2692,33 @@ function isQuoteImageModalOpen() {
   return quoteImageModal && !quoteImageModal.hidden;
 }
 
+let quoteImageZoom = 1;
+let quoteImagePanX = 0;
+let quoteImagePanY = 0;
+let quoteImageDragging = false;
+let quoteImageDragStartX = 0;
+let quoteImageDragStartY = 0;
+
+function applyQuoteImageTransform() {
+  if (!quoteImageModalImg) return;
+  quoteImageModalImg.style.transform = `translate(${quoteImagePanX}px, ${quoteImagePanY}px) scale(${quoteImageZoom})`;
+  quoteImageModalImg.classList.toggle("is-zoomed", quoteImageZoom > 1);
+  if (quoteImageZoomReset) quoteImageZoomReset.textContent = `${Math.round(quoteImageZoom * 100)}%`;
+}
+
+function setQuoteImageZoom(value, resetPan = true) {
+  quoteImageZoom = Math.min(4, Math.max(0.5, Number(value) || 1));
+  if (resetPan) {
+    quoteImagePanX = 0;
+    quoteImagePanY = 0;
+  }
+  applyQuoteImageTransform();
+}
+
 function openQuoteImageModal(src, alt) {
   quoteImageModalImg.src = src;
   quoteImageModalImg.alt = alt;
+  setQuoteImageZoom(1);
   quoteImageModal.hidden = false;
 
   if (!window.history?.state?.quoteImageModal) {
@@ -2651,6 +2737,7 @@ function openQuoteImageModal(src, alt) {
 function closeQuoteImagePreview(options = {}) {
   quoteImageModal.hidden = true;
   quoteImageModalImg.removeAttribute("src");
+  setQuoteImageZoom(1);
 
   if (options.fromHistory !== true && window.history?.state?.quoteImageModal) {
     window.history.back();
@@ -2848,6 +2935,43 @@ sellerImage.addEventListener("click", (event) => {
 });
 
 closeQuoteImageModal.addEventListener("click", closeQuoteImagePreview);
+
+quoteImageZoomOut?.addEventListener("click", () => setQuoteImageZoom(quoteImageZoom - 0.25));
+quoteImageZoomIn?.addEventListener("click", () => setQuoteImageZoom(quoteImageZoom + 0.25));
+quoteImageZoomReset?.addEventListener("click", () => setQuoteImageZoom(1));
+quoteImageFit?.addEventListener("click", () => setQuoteImageZoom(1));
+
+quoteImageViewport?.addEventListener("wheel", (event) => {
+  if (!isQuoteImageModalOpen()) return;
+  event.preventDefault();
+  setQuoteImageZoom(quoteImageZoom + (event.deltaY < 0 ? 0.2 : -0.2), false);
+}, { passive: false });
+
+quoteImageViewport?.addEventListener("pointerdown", (event) => {
+  if (quoteImageZoom <= 1) return;
+  quoteImageDragging = true;
+  quoteImageDragStartX = event.clientX - quoteImagePanX;
+  quoteImageDragStartY = event.clientY - quoteImagePanY;
+  quoteImageViewport.setPointerCapture?.(event.pointerId);
+  quoteImageViewport.classList.add("is-dragging");
+});
+
+quoteImageViewport?.addEventListener("pointermove", (event) => {
+  if (!quoteImageDragging) return;
+  quoteImagePanX = event.clientX - quoteImageDragStartX;
+  quoteImagePanY = event.clientY - quoteImageDragStartY;
+  applyQuoteImageTransform();
+});
+
+function stopQuoteImageDragging(event) {
+  if (!quoteImageDragging) return;
+  quoteImageDragging = false;
+  quoteImageViewport?.releasePointerCapture?.(event.pointerId);
+  quoteImageViewport?.classList.remove("is-dragging");
+}
+
+quoteImageViewport?.addEventListener("pointerup", stopQuoteImageDragging);
+quoteImageViewport?.addEventListener("pointercancel", stopQuoteImageDragging);
 
 quoteImageModal.addEventListener("click", (event) => {
   if (event.target === quoteImageModal) {
@@ -3072,9 +3196,11 @@ lookupForm.addEventListener("submit", async (event) => {
   if (serverMatches.length && canUseApiServer()) {
     mergeRequests(serverMatches);
     await Promise.allSettled([
-      syncBidsFromServer(),
+      syncLookupBidsFromServer(serverMatches),
       syncReviewsFromServer({ showLoading: false }),
     ]);
+  } else if (!serverMatches.length && canUseApiServer()) {
+    replaceBids([]);
   }
   const matches = serverMatches.length
     ? serverMatches

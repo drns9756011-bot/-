@@ -2457,6 +2457,11 @@ async function updateApprovedSeller(env, request, id) {
     values.push(String(body.memo || "").trim());
   }
 
+  if (Object.prototype.hasOwnProperty.call(body, "quoteAlimtalkOptOut")) {
+    updates.push("quote_alimtalk_opt_out = ?");
+    values.push(body.quoteAlimtalkOptOut ? 1 : 0);
+  }
+
   if (!updates.length) {
     return json({ ok: false, message: "변경할 정보가 없습니다." }, 400);
   }
@@ -2620,6 +2625,7 @@ async function getCustomerQuotes(env, request) {
   await closeExpiredQuotes(env);
   const url = new URL(request.url);
   const customer = String(url.searchParams.get("customer") || "").trim();
+  const normalizedCustomer = normalizeText(customer);
   const phone = normalizePhone(url.searchParams.get("phone"));
   const quoteNumber = String(url.searchParams.get("quoteNumber") || "").trim();
   const scope = String(url.searchParams.get("scope") || "seller");
@@ -2632,17 +2638,17 @@ async function getCustomerQuotes(env, request) {
     const result = quoteNumber
       ? await env.DB.prepare(
           `SELECT * FROM customer_quotes
-           WHERE customer = ? AND REPLACE(REPLACE(phone, '-', ''), ' ', '') = ? AND quote_number = ? AND (personal_expires_at = '' OR personal_expires_at >= ?)
+           WHERE REPLACE(customer, ' ', '') = ? AND REPLACE(REPLACE(phone, '-', ''), ' ', '') = ? AND quote_number = ? AND (personal_expires_at = '' OR personal_expires_at >= ?)
            ORDER BY created_at DESC`
         )
-          .bind(customer, phone, quoteNumber, now)
+          .bind(normalizedCustomer, phone, quoteNumber, now)
           .all()
       : await env.DB.prepare(
           `SELECT * FROM customer_quotes
-           WHERE customer = ? AND REPLACE(REPLACE(phone, '-', ''), ' ', '') = ? AND (personal_expires_at = '' OR personal_expires_at >= ?)
+           WHERE REPLACE(customer, ' ', '') = ? AND REPLACE(REPLACE(phone, '-', ''), ' ', '') = ? AND (personal_expires_at = '' OR personal_expires_at >= ?)
            ORDER BY created_at DESC`
         )
-          .bind(customer, phone, now)
+          .bind(normalizedCustomer, phone, now)
           .all();
     rows = result.results || [];
   } else {
