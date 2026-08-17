@@ -15,7 +15,7 @@ const statements = [
   `CREATE INDEX IF NOT EXISTS idx_subscription_product_sets_status ON subscription_product_sets(status, activated_at DESC);`,
   `DELETE FROM subscription_products WHERE set_id = ${quote(setId)};`,
   `DELETE FROM subscription_product_sets WHERE id = ${quote(setId)};`,
-  `INSERT INTO subscription_product_sets (id, status, source_name, source_date, product_count, created_at, activated_at) VALUES (${quote(setId)}, 'staging', ${quote(payload.sourceName)}, ${quote(payload.sourceDate)}, ${Number(payload.items.length)}, ${quote(now)}, '');`,
+  `INSERT INTO subscription_product_sets (id, status, source_name, source_date, product_count, created_at, activated_at) VALUES (${quote(setId)}, 'staging', '구독 상품 데이터', ${quote(payload.sourceDate)}, ${Number(payload.items.length)}, ${quote(now)}, '');`,
 ];
 
 payload.items.forEach((item, index) => {

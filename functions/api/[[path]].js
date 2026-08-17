@@ -6,6 +6,8 @@ const jsonHeaders = {
   "Cache-Control": "no-store",
 };
 
+import initialSubscriptionCatalog from "../data/subscription-products-initial.js";
+
 const SOLAPI_DEFAULTS = {
   SOLAPI_CHANNEL_ID: "KA01PF260720091629575EzVmd2YRyU7",
   SOLAPI_FROM: "01066312323",
@@ -4694,11 +4696,69 @@ function normalizeSubscriptionProduct(row) {
   };
 }
 
-async function getSubscriptionProducts(env) {
-  await ensureSubscriptionProductSchema(env);
-  const activeSet = await env.DB.prepare(
+async function ensureInitialSubscriptionCatalog(env) {
+  const existingActive = await env.DB.prepare(
     "SELECT * FROM subscription_product_sets WHERE status = 'active' ORDER BY activated_at DESC LIMIT 1"
   ).first();
+  if (existingActive) return existingActive;
+
+  const items = Array.isArray(initialSubscriptionCatalog?.items) ? initialSubscriptionCatalog.items : [];
+  if (!items.length) return null;
+  const sourceDate = String(initialSubscriptionCatalog.sourceDate || "initial");
+  const setId = `subscription-initial-${sourceDate.replaceAll("-", "")}`;
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO subscription_product_sets
+      (id, status, source_name, source_date, product_count, created_at, activated_at)
+     VALUES (?, 'staging', '구독 상품 데이터', ?, ?, ?, '')`
+  ).bind(setId, sourceDate, items.length, now).run();
+
+  for (let offset = 0; offset < items.length; offset += 75) {
+    await env.DB.batch(items.slice(offset, offset + 75).map((item, localIndex) => env.DB.prepare(
+      `INSERT OR IGNORE INTO subscription_products
+        (id, set_id, brand, category, source_category, model, name, monthly_fee_72,
+         care_type, care_detail, visit_cycle, image_url, sort_order, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      `${setId}-${String(offset + localIndex + 1).padStart(4, "0")}`,
+      setId,
+      item.brand,
+      item.category,
+      item.sourceCategory,
+      item.model,
+      item.name,
+      Number(item.monthlyFee72 || 0),
+      item.careType || "",
+      item.careDetail || "",
+      item.visitCycle || "",
+      item.imageUrl || "",
+      offset + localIndex,
+      now,
+    )));
+  }
+
+  const activeAfterInsert = await env.DB.prepare(
+    "SELECT * FROM subscription_product_sets WHERE status = 'active' ORDER BY activated_at DESC LIMIT 1"
+  ).first();
+  if (activeAfterInsert) {
+    if (activeAfterInsert.id === setId) return activeAfterInsert;
+    await env.DB.prepare("DELETE FROM subscription_products WHERE set_id = ?").bind(setId).run();
+    await env.DB.prepare("DELETE FROM subscription_product_sets WHERE id = ? AND status = 'staging'").bind(setId).run();
+    return activeAfterInsert;
+  }
+
+  await env.DB.prepare(
+    "UPDATE subscription_product_sets SET status = 'active', activated_at = ? WHERE id = ? AND status = 'staging'"
+  ).bind(now, setId).run();
+  return env.DB.prepare("SELECT * FROM subscription_product_sets WHERE id = ? LIMIT 1").bind(setId).first();
+}
+
+async function getSubscriptionProducts(env) {
+  await ensureSubscriptionProductSchema(env);
+  let activeSet = await env.DB.prepare(
+    "SELECT * FROM subscription_product_sets WHERE status = 'active' ORDER BY activated_at DESC LIMIT 1"
+  ).first();
+  if (!activeSet) activeSet = await ensureInitialSubscriptionCatalog(env);
   if (!activeSet) return json({ ok: true, source: null, count: 0, items: [] });
 
   const rows = [];
@@ -4717,7 +4777,7 @@ async function getSubscriptionProducts(env) {
   return json({
     ok: true,
     source: {
-      name: activeSet.source_name,
+      name: "구독 상품 데이터",
       date: activeSet.source_date,
       activatedAt: activeSet.activated_at,
       contractMonths: 72,
@@ -4771,7 +4831,7 @@ async function replaceSubscriptionProducts(env, request) {
      VALUES (?, 'staging', ?, ?, ?, ?, '')`
   ).bind(
     setId,
-    String(body.sourceName || "구독 상품 목록").trim().slice(0, 240),
+    "구독 상품 데이터",
     String(body.sourceDate || "").trim().slice(0, 20),
     items.length,
     now
