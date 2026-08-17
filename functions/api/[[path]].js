@@ -4667,10 +4667,15 @@ async function ensureSubscriptionProductSchema(env) {
       care_detail TEXT DEFAULT '',
       visit_cycle TEXT DEFAULT '',
       image_url TEXT DEFAULT '',
+      options_json TEXT NOT NULL DEFAULT '[]',
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     )`
   ).run();
+  const columns = await env.DB.prepare("PRAGMA table_info(subscription_products)").all();
+  if (!(columns.results || []).some((column) => column.name === "options_json")) {
+    await env.DB.prepare("ALTER TABLE subscription_products ADD COLUMN options_json TEXT NOT NULL DEFAULT '[]'").run();
+  }
   const indexes = [
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_subscription_products_set_model ON subscription_products(set_id, model)",
     "CREATE INDEX IF NOT EXISTS idx_subscription_products_set_category ON subscription_products(set_id, category, sort_order)",
@@ -4681,6 +4686,11 @@ async function ensureSubscriptionProductSchema(env) {
 }
 
 function normalizeSubscriptionProduct(row) {
+  let options = [];
+  try {
+    const parsed = JSON.parse(row.options_json || "[]");
+    if (Array.isArray(parsed)) options = parsed;
+  } catch (_) {}
   return {
     id: row.id,
     brand: row.brand,
@@ -4693,6 +4703,7 @@ function normalizeSubscriptionProduct(row) {
     careDetail: row.care_detail || "",
     visitCycle: row.visit_cycle || "",
     imageUrl: row.image_url || "",
+    options,
   };
 }
 
@@ -4700,12 +4711,14 @@ async function ensureInitialSubscriptionCatalog(env) {
   const existingActive = await env.DB.prepare(
     "SELECT * FROM subscription_product_sets WHERE status = 'active' ORDER BY activated_at DESC LIMIT 1"
   ).first();
-  if (existingActive) return existingActive;
+  const sourceDate = String(initialSubscriptionCatalog.sourceDate || "initial");
+  const setId = `subscription-initial-options-v1-${sourceDate.replaceAll("-", "")}`;
+  if (existingActive && (!String(existingActive.id || "").startsWith("subscription-initial-") || existingActive.id === setId)) {
+    return existingActive;
+  }
 
   const items = Array.isArray(initialSubscriptionCatalog?.items) ? initialSubscriptionCatalog.items : [];
   if (!items.length) return null;
-  const sourceDate = String(initialSubscriptionCatalog.sourceDate || "initial");
-  const setId = `subscription-initial-${sourceDate.replaceAll("-", "")}`;
   const now = new Date().toISOString();
   await env.DB.prepare(
     `INSERT OR IGNORE INTO subscription_product_sets
@@ -4717,8 +4730,8 @@ async function ensureInitialSubscriptionCatalog(env) {
     await env.DB.batch(items.slice(offset, offset + 75).map((item, localIndex) => env.DB.prepare(
       `INSERT OR IGNORE INTO subscription_products
         (id, set_id, brand, category, source_category, model, name, monthly_fee_72,
-         care_type, care_detail, visit_cycle, image_url, sort_order, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         care_type, care_detail, visit_cycle, image_url, options_json, sort_order, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       `${setId}-${String(offset + localIndex + 1).padStart(4, "0")}`,
       setId,
@@ -4732,6 +4745,7 @@ async function ensureInitialSubscriptionCatalog(env) {
       item.careDetail || "",
       item.visitCycle || "",
       item.imageUrl || "",
+      JSON.stringify(Array.isArray(item.options) ? item.options : []),
       offset + localIndex,
       now,
     )));
@@ -4740,16 +4754,21 @@ async function ensureInitialSubscriptionCatalog(env) {
   const activeAfterInsert = await env.DB.prepare(
     "SELECT * FROM subscription_product_sets WHERE status = 'active' ORDER BY activated_at DESC LIMIT 1"
   ).first();
-  if (activeAfterInsert) {
+  if (activeAfterInsert && activeAfterInsert.id !== existingActive?.id) {
     if (activeAfterInsert.id === setId) return activeAfterInsert;
     await env.DB.prepare("DELETE FROM subscription_products WHERE set_id = ?").bind(setId).run();
     await env.DB.prepare("DELETE FROM subscription_product_sets WHERE id = ? AND status = 'staging'").bind(setId).run();
     return activeAfterInsert;
   }
 
-  await env.DB.prepare(
-    "UPDATE subscription_product_sets SET status = 'active', activated_at = ? WHERE id = ? AND status = 'staging'"
-  ).bind(now, setId).run();
+  await env.DB.batch([
+    env.DB.prepare("UPDATE subscription_product_sets SET status = 'archived' WHERE status = 'active'"),
+    env.DB.prepare("UPDATE subscription_product_sets SET status = 'active', activated_at = ? WHERE id = ? AND status = 'staging'").bind(now, setId),
+  ]);
+  if (existingActive?.id && existingActive.id !== setId) {
+    await env.DB.prepare("DELETE FROM subscription_products WHERE set_id = ?").bind(existingActive.id).run();
+    await env.DB.prepare("DELETE FROM subscription_product_sets WHERE id = ?").bind(existingActive.id).run();
+  }
   return env.DB.prepare("SELECT * FROM subscription_product_sets WHERE id = ? LIMIT 1").bind(setId).first();
 }
 
@@ -4758,7 +4777,9 @@ async function getSubscriptionProducts(env) {
   let activeSet = await env.DB.prepare(
     "SELECT * FROM subscription_product_sets WHERE status = 'active' ORDER BY activated_at DESC LIMIT 1"
   ).first();
-  if (!activeSet) activeSet = await ensureInitialSubscriptionCatalog(env);
+  if (!activeSet || String(activeSet.id || "").startsWith("subscription-initial-")) {
+    activeSet = await ensureInitialSubscriptionCatalog(env);
+  }
   if (!activeSet) return json({ ok: true, source: null, count: 0, items: [] });
 
   const rows = [];
@@ -4792,6 +4813,15 @@ function cleanSubscriptionInput(item, index) {
   const model = String(item?.model || "").trim().toUpperCase().slice(0, 120);
   const monthlyFee72 = Math.round(Number(item?.monthlyFee72 || 0));
   if (!model || monthlyFee72 <= 0) throw new Error(`${index + 1}번째 상품의 모델명 또는 72개월 요금이 올바르지 않습니다.`);
+  const options = (Array.isArray(item?.options) ? item.options : []).slice(0, 50).map((option) => ({
+    label: String(option?.label || "").trim().slice(0, 180),
+    model: String(option?.model || model).trim().toUpperCase().slice(0, 120),
+    installationType: String(option?.installationType || "").trim().slice(0, 40),
+    careType: String(option?.careType || "").trim().slice(0, 80),
+    careDetail: String(option?.careDetail || "").trim().slice(0, 120),
+    visitCycle: String(option?.visitCycle || "").trim().slice(0, 60),
+    monthlyFee72: Math.round(Number(option?.monthlyFee72 || 0)),
+  })).filter((option) => option.model && option.monthlyFee72 > 0);
   return {
     brand: String(item?.brand || "LG전자").trim().slice(0, 40),
     category: String(item?.category || "생활가전").trim().slice(0, 40),
@@ -4803,6 +4833,7 @@ function cleanSubscriptionInput(item, index) {
     careDetail: String(item?.careDetail || "").trim().slice(0, 120),
     visitCycle: String(item?.visitCycle || "").trim().slice(0, 60),
     imageUrl: String(item?.imageUrl || "").trim().slice(0, 1000),
+    options,
   };
 }
 
@@ -4842,12 +4873,12 @@ async function replaceSubscriptionProducts(env, request) {
       const statements = items.slice(offset, offset + 75).map((item, localIndex) => env.DB.prepare(
         `INSERT INTO subscription_products
           (id, set_id, brand, category, source_category, model, name, monthly_fee_72,
-           care_type, care_detail, visit_cycle, image_url, sort_order, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           care_type, care_detail, visit_cycle, image_url, options_json, sort_order, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
         createId("subscription-product"), setId, item.brand, item.category, item.sourceCategory,
         item.model, item.name, item.monthlyFee72, item.careType, item.careDetail, item.visitCycle,
-        item.imageUrl, offset + localIndex, now
+        item.imageUrl, JSON.stringify(item.options), offset + localIndex, now
       ));
       await env.DB.batch(statements);
     }

@@ -8,7 +8,7 @@ from PIL import Image, ImageChops, ImageOps
 
 
 ROOT = Path(__file__).resolve().parent.parent
-CATALOG_PATH = ROOT / "private-data" / "subscription-products-20260814.json"
+CATALOG_PATH = ROOT / "private-data" / "subscription-products-20260817-options.json"
 SOURCE_DIR = ROOT / "public" / "assets" / "subscription-product-images"
 OUTPUT_DIR = ROOT / "public" / "assets" / "subscription-product-atlases"
 REMOTE_CACHE_DIR = ROOT / ".tmp" / "subscription-official-images"

@@ -38,7 +38,8 @@ try {
   $workbook = $excel.Workbooks.Open($InputPath, 0, $true)
   $sheet = $workbook.Worksheets.Item('전자랜드')
   $values = $sheet.UsedRange.Value2
-  $bestByModel = @{}
+  $groups = @{}
+  $optionsByGroup = @{}
 
   for ($row = 2; $row -le $values.GetLength(0); $row++) {
     $term = [string]$values[$row, 8]
@@ -52,25 +53,69 @@ try {
 
     $sourceCategory = ([string]$values[$row, 1]).Trim()
     $category = if ($categoryMap.ContainsKey($sourceCategory)) { $categoryMap[$sourceCategory] } else { '생활가전' }
-    $item = [ordered]@{
-      brand = 'LG전자'
-      category = $category
-      sourceCategory = $sourceCategory
-      model = $model
-      name = "LG $sourceCategory"
-      monthlyFee72 = [int]$fee
-      careType = ([string]$values[$row, 5]).Trim()
-      careDetail = ([string]$values[$row, 6]).Trim()
-      visitCycle = ([string]$values[$row, 7]).Trim()
-      imageUrl = ''
+    $groupModel = $model
+    $installationType = ''
+    if ($category -eq 'TV') {
+      $dotIndex = $model.IndexOf('.')
+      $modelBody = if ($dotIndex -ge 0) { $model.Substring(0, $dotIndex) } else { $model }
+      $modelSuffix = if ($dotIndex -ge 0) { $model.Substring($dotIndex) } else { '' }
+      if ($modelBody -match '^(.*)([SW])$') {
+        $groupModel = "$($Matches[1])$modelSuffix"
+        $installationType = if ($Matches[2] -eq 'S') { '스탠드형' } else { '벽걸이형' }
+      }
     }
 
-    if (-not $bestByModel.ContainsKey($model) -or $item.monthlyFee72 -lt $bestByModel[$model].monthlyFee72) {
-      $bestByModel[$model] = $item
+    $groupKey = "$category|$groupModel"
+    if (-not $groups.ContainsKey($groupKey)) {
+      $groups[$groupKey] = [ordered]@{
+        brand = 'LG전자'
+        category = $category
+        sourceCategory = $sourceCategory
+        model = $groupModel
+        name = "LG $sourceCategory"
+        monthlyFee72 = 0
+        careType = ''
+        careDetail = ''
+        visitCycle = ''
+        imageModel = $model
+        imageUrl = ''
+        options = @()
+      }
+      $optionsByGroup[$groupKey] = @{}
+    }
+
+    $careType = ([string]$values[$row, 5]).Trim()
+    $careDetail = ([string]$values[$row, 6]).Trim()
+    $visitCycle = ([string]$values[$row, 7]).Trim()
+    $labelParts = @($installationType, $careType, $careDetail, $(if ($visitCycle) { "$visitCycle 주기" } else { '' })) | Where-Object { $_ }
+    $option = [ordered]@{
+      label = if ($labelParts.Count) { $labelParts -join ' · ' } else { $model }
+      model = $model
+      installationType = $installationType
+      careType = $careType
+      careDetail = $careDetail
+      visitCycle = $visitCycle
+      monthlyFee72 = [int]$fee
+    }
+    $optionKey = "$model|$installationType|$careType|$careDetail|$visitCycle"
+    $previousOption = $optionsByGroup[$groupKey][$optionKey]
+    if (-not $previousOption -or $option.monthlyFee72 -lt $previousOption.monthlyFee72) {
+      $optionsByGroup[$groupKey][$optionKey] = $option
     }
   }
 
-  $items = @($bestByModel.Values | Sort-Object category, sourceCategory, model)
+  foreach ($groupKey in $groups.Keys) {
+    $options = @($optionsByGroup[$groupKey].Values | Sort-Object monthlyFee72, installationType, careType, model)
+    $primary = $options[0]
+    $groups[$groupKey].monthlyFee72 = $primary.monthlyFee72
+    $groups[$groupKey].careType = $primary.careType
+    $groups[$groupKey].careDetail = $primary.careDetail
+    $groups[$groupKey].visitCycle = $primary.visitCycle
+    $groups[$groupKey].imageModel = $primary.model
+    $groups[$groupKey].options = $options
+  }
+
+  $items = @($groups.Values | Sort-Object category, sourceCategory, model)
   $payload = [ordered]@{
     sourceName = [System.IO.Path]::GetFileName($InputPath)
     sourceDate = '2026-08-14'

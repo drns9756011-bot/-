@@ -227,6 +227,7 @@ CREATE TABLE IF NOT EXISTS subscription_products (
   care_detail TEXT DEFAULT '',
   visit_cycle TEXT DEFAULT '',
   image_url TEXT DEFAULT '',
+  options_json TEXT NOT NULL DEFAULT '[]',
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   FOREIGN KEY (set_id) REFERENCES subscription_product_sets(id)

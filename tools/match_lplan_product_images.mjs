@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 
 const root = path.resolve(import.meta.dirname, "..");
 const sourceDir = path.join(root, ".tmp", "lplan-image-source");
-const catalogPath = path.join(root, "private-data", "subscription-products-20260814.json");
+const catalogPath = path.join(root, "private-data", "subscription-products-20260817-options.json");
 const sourceImageDir = path.join(sourceDir, "assets", "product-images");
 const outputImageDir = path.join(root, "public", "assets", "subscription-product-images");
 const reportPath = path.join(root, "subscription-product-image-match-report.json");
@@ -103,7 +103,8 @@ const unmatched = [];
 const usedLocalFiles = new Set();
 
 for (const item of catalog.items) {
-  const match = findImage(item.model);
+  const imageModel = item.imageModel || item.options?.[0]?.model || item.model;
+  const match = findImage(imageModel);
   const imageUrl = match ? materializeImage(match.image) : null;
   if (!match || !imageUrl) {
     item.imageUrl = "";

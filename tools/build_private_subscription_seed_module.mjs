@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
-const inputPath = path.join(root, "private-data", "subscription-products-20260814.json");
+const inputPath = path.join(root, "private-data", "subscription-products-20260817-options.json");
 const outputPath = path.join(root, "functions", "data", "subscription-products-initial.js");
 const payload = JSON.parse(await fs.readFile(inputPath, "utf8"));
 const privateSeed = {
@@ -18,6 +18,7 @@ const privateSeed = {
     careDetail: item.careDetail,
     visitCycle: item.visitCycle,
     imageUrl: item.imageUrl,
+    options: Array.isArray(item.options) ? item.options : [],
   })),
 };
 
